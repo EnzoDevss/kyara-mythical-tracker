@@ -2,7 +2,7 @@
 
 You will deploy the dashboard to Cloudflare and run the price collector in a public GitHub repository. Your computer only needs to be on during setup. The website and later updates run in the cloud.
 
-The package has not been deployed or connected to your accounts. Follow these steps in order. Commands below are for Windows PowerShell; the same `npm`, `npx`, `python`, and `git` commands also work in a terminal on macOS/Linux.
+For a new installation, follow these steps in order. If your tracker is already running, use **Adding price history to an existing installation** below. Commands are for Windows PowerShell; the same `npm`, `npx`, `python`, and `git` commands also work in a terminal on macOS/Linux.
 
 ## 1. Prepare your accounts and project folder
 
@@ -87,7 +87,7 @@ The **Check project** workflow runs on the push. Scheduled collection is initial
 
 ## 5. Create a Cloudflare upload token
 
-The collector needs permission to write its snapshot to KV. This token is separate from the browser login used by Wrangler.
+The collector needs permission to read its saved history and write history plus its latest snapshot to KV. This token is separate from the browser login used by Wrangler. The existing Workers KV Storage Edit token supports both operations.
 
 1. In Cloudflare, open your profile menu, then **My Profile → API Tokens → Create Token → Create Custom Token**.
 2. Give it a name such as `Kyara KV updater`.
@@ -111,7 +111,7 @@ In your GitHub repository, open **Settings → Secrets and variables → Actions
 
 Paste the values without quotes or extra spaces. Keep the token in GitHub's secret field, not in source files, screenshots, or this chat. [GitHub repository secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)
 
-Now open **Actions → Update prices → Run workflow**, choose the default branch (`main`), and run it. If GitHub asks you to enable Actions for this repository, enable them first. The workflow runs tests, collects all current Mythical prices, then uploads one complete snapshot. Allow several minutes; it intentionally spaces source requests.
+Now open **Actions → Update prices → Run workflow**, choose the default branch (`main`), and run it. If GitHub asks you to enable Actions for this repository, enable them first. The workflow runs tests, collects all current Mythical prices, saves one history observation per card, then uploads the complete latest snapshot. Allow several minutes; it intentionally spaces source requests.
 
 After a green check, reopen the dashboard or press its refresh button. Its collection timestamp should be recent and its historical-preview indicator should clear. If it fails, open the failed step's log; the previously published snapshot stays available. This first run also verifies that Kyara accepts requests from GitHub's runner, which cannot be confirmed by local tests alone.
 
@@ -131,7 +131,18 @@ Kyara's public endpoints are undocumented. Its [rules](https://kyara.games/regle
 
 ## Keeping it free and running
 
-Stay on **Workers Free**, keep the GitHub repository public, use the supplied standard Ubuntu runner, and use the free `workers.dev` hostname. The collector uses no browser automation and creates no Actions artifacts or caches. At 48 successful runs/day, it writes one KV value each time: 48 writes/day against the free 1,000/day allowance. Worker API requests and KV reads have separate free 100,000/day quotas shared with other account use. Heavy public traffic can exhaust those quotas; free-plan operations can then fail until the quota resets. [Cloudflare KV pricing](https://developers.cloudflare.com/kv/platform/pricing/), [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+Stay on **Workers Free**, keep the GitHub repository public, use the supplied standard Ubuntu runner, and use the free `workers.dev` hostname. The collector uses no browser automation and creates no Actions artifacts or caches. Each successful run writes eight history records plus one latest snapshot: **432 writes/day** at 48 runs, against the free 1,000/day allowance. Each manual run adds nine writes. Worker API requests and KV reads have separate free 100,000/day quotas shared with other account use; each collection also reads eight history records. Heavy public traffic can exhaust those quotas; free-plan operations can then fail until the quota resets. [Cloudflare KV pricing](https://developers.cloudflare.com/kv/platform/pricing/), [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+
+## Adding price history to an existing installation
+
+Keep your existing KV namespace, GitHub secrets, and `ENABLE_SCHEDULE` variable. There is no new service to create or token permission to add.
+
+1. Deploy the updated page and Worker from this project folder with `npm.cmd run deploy`.
+2. Commit and push the updated project, including `scripts/update_prices.py`, to your repository's default branch.
+3. Open **Actions → Update prices → Run workflow** for the first observation, or let the next scheduled run collect it.
+4. Open your website's **Price history** page and select a card. After a successful updated run and a short propagation delay, it should show **1 recorded observation**. Each later collection adds another point. The normal schedule remains minute 13 and 43 of each hour, subject to GitHub delays.
+
+Do not upload `public/seed.json` again. History starts with the updated collector; old snapshot-only runs cannot be reconstructed. The 24-hour, 7-day, and 30-day views become populated as time passes. Records older than 30 days are removed during updates. To verify persistence, compare the **Recorded observations** table after two successful runs: it should contain both timestamps, even if prices did not change.
 
 GitHub may disable public-repository schedules after 60 days without repository activity. Check **Actions** if the dashboard becomes stale, and re-enable a disabled workflow there. Routine scheduled runs alone are not a guarantee that this inactivity rule will be avoided. [Scheduling limitations](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 
@@ -145,6 +156,7 @@ GitHub may disable public-repository schedules after 60 days without repository 
 | Invalid namespace or Cloudflare upload 403 | Check all three GitHub secrets, token KV edit permission, and that both IDs belong to the same account. |
 | Dashboard keeps showing historical data | Confirm the workflow succeeded and its namespace ID matches `wrangler.jsonc`; allow propagation and refresh. |
 | Dashboard is stale | Check the most recent **Update prices** run and `ENABLE_SCHEDULE`; check whether GitHub disabled the workflow. |
+| History has no points | Confirm the updated collector is pushed to the default branch and has completed at least once. Look for `Saved 30-day price history (8 KV writes)` in its log; then check the page for updates. |
 | Kyara returns 401, 403, 429, or changed JSON | Read the workflow error. Pause the schedule if persistent; the collector does not bypass access restrictions. |
 | No **Run workflow** button | The workflow must be on the default branch, Actions must be enabled, and you need repository write access. |
 

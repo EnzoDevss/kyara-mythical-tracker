@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123f35">
+  <meta name="description" content="Explore recorded market prices for every Kyara Mythical over 24 hours, 7 days, or 30 days.">
+  <title>Price history · Kyara Mythical Market</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/history.css">
+  <script type="module" src="/history.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#chart-panel">Skip to price chart</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="brand" href="/" aria-label="Kyara Mythical Market home"><span class="brand-mark" aria-hidden="true">◆</span><span>KYARA<span class="brand-sub">MYTHICAL MARKET</span></span></a>
+      <nav class="page-nav" aria-label="Main navigation"><a href="/">Comparison</a><a href="/history" aria-current="page">Price history</a></nav>
+    </header>
+    <main>
+      <section class="history-intro" aria-labelledby="page-title">
+        <p class="eyebrow">THE MARKET, OVER TIME</p>
+        <h1 id="page-title">Every card has<br><span>a price story.</span></h1>
+        <p class="hero-copy">Follow your Mythicals through every market update. Choose a card to explore its recorded price history.</p>
+      </section>
+      <section class="card-picker" aria-label="Choose a Mythical card">
+        <label for="card-search">Find a card<input type="search" id="card-search" placeholder="Search character or series…" autocomplete="off"></label>
+        <label for="card-select">Mythical card<select id="card-select" disabled><option>Loading cards…</option></select></label>
+        <p id="picker-note" class="muted" aria-live="polite">Loading the current booster pools.</p>
+      </section>
+      <div id="history-alert" class="notice" role="status" hidden></div>
+      <section id="chart-panel" class="chart-panel" aria-labelledby="card-name">
+        <div class="card-heading"><div><p class="eyebrow" id="card-pool">MYTHICAL PRICE HISTORY</p><h2 id="card-name">Choose a card</h2><p id="card-series" class="muted"></p></div><a id="card-source" class="external-link" target="_blank" rel="noopener noreferrer" hidden>View on Kyara ↗</a></div>
+        <div class="chart-controls">
+          <fieldset class="period-control"><legend class="sr-only">History time range</legend><label><input type="radio" name="range" value="24h" checked><span>24 hours</span></label><label><input type="radio" name="range" value="7d"><span>7 days</span></label><label><input type="radio" name="range" value="30d"><span>30 days</span></label></fieldset>
+          <label class="metric-label" for="metric">Price tracked<select id="metric"><option value="median7d">7-day market median</option><option value="median30d">30-day market median</option></select></label>
+        </div>
+        <div class="history-stats" aria-live="polite">
+          <div><p class="stat-label">Latest recorded</p><p id="history-latest" class="history-number">—</p></div>
+          <div><p class="stat-label">Change across shown samples</p><p id="history-change" class="history-number">—</p></div>
+          <div><p class="stat-label">Lowest in view</p><p id="history-low" class="history-number">—</p></div>
+          <div><p class="stat-label">Highest in view</p><p id="history-high" class="history-number">—</p></div>
+        </div>
+        <div class="chart-caption"><span id="chart-metric">7-day market median · chakra ◆</span><span id="chart-count">No observations loaded</span></div>
+        <div class="chart-frame" id="chart-frame" aria-busy="true">
+          <svg id="history-chart" role="img" aria-labelledby="plot-title plot-description" tabindex="0" hidden></svg>
+          <div id="chart-empty" class="chart-empty" role="status"><span class="empty-diamond" aria-hidden="true">◇</span><h3 id="empty-title">Loading price history</h3><p id="empty-copy">Retrieving the observations saved by the collector.</p></div>
+        </div>
+        <p id="point-readout" class="point-readout" aria-live="polite">Hover or tap the chart to inspect a point. With the chart focused, use the arrow keys.</p>
+        <p id="history-coverage" class="history-coverage" aria-live="polite"></p>
+        <div class="history-status"><div><span id="history-status" class="status-pill pending">Loading history</span><p id="history-updated" class="muted"></p></div><button type="button" id="history-refresh" class="button button-quiet">Check for updates ↻</button></div>
+      </section>
+      <details class="method history-method"><summary>What am I looking at? <span aria-hidden="true">+</span></summary><div class="method-grid"><div><h3>A record of each update</h3><p>Each point is the market median Kyara reported when a collection completed. Successful scheduled runs add points about every 30 minutes; manual runs add points too. Unchanged prices are still recorded.</p></div><div><h3>Window versus price metric</h3><p>24 hours, 7 days and 30 days choose how far back the chart looks. “Price tracked” chooses which rolling market median to plot. These are observations of those medians, not individual sales or a new median calculated for the chart window.</p></div><div><h3>Honest gaps and fresh starts</h3><p>History starts when this feature is enabled; earlier observations cannot be reconstructed. The collector keeps a rolling 30 days. Missing prices and collection gaps over 90 minutes break the line. The vertical axis scales to the observed prices.</p><p id="timezone-note">Dates and times use your device’s timezone.</p></div></div></details>
+      <details class="method observation-details" id="observation-details"><summary>Recorded observations <span aria-hidden="true">+</span></summary><div class="table-wrap"><table><caption class="sr-only">Saved observations for the selected card and time range, newest first</caption><thead><tr><th scope="col">Collected at</th><th scope="col" class="numeric">7-day median ◆</th><th scope="col" class="numeric">30-day median ◆</th></tr></thead><tbody id="observation-rows"></tbody></table></div></details>
+      <noscript><p class="notice">JavaScript is needed to load the card picker and price charts.</p></noscript>
+    </main>
+    <footer><p>An independent community tracker. Not affiliated with Kyara.</p><p>MYTHICAL MARKET <span aria-hidden="true">◆</span></p></footer>
+  </div>
+</body>
+</html>

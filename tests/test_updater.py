@@ -52,6 +52,8 @@ class FakeClient:
         return copy.deepcopy(value)
 
     def request_json(self, url, **kwargs):
+        if kwargs.get("method", "GET") == "GET":
+            return None
         self.uploads.append((url, kwargs))
         return self.upload_result
 
@@ -236,14 +238,15 @@ class ReliabilityTests(unittest.TestCase):
                 self.assertEqual(client.calls, [])
                 self.assertFalse(output.parent.exists())
 
-    def test_complete_snapshot_is_written_and_uploaded_once(self):
+    def test_complete_snapshot_is_written_after_eight_history_buckets(self):
         client = FakeClient()
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "data" / "latest.json"
             updater.run_update(output, upload=True, environ=CREDENTIALS, client=client)
             updater.validate_snapshot(updater.decode_json(output.read_bytes()))
-            self.assertEqual(len(client.uploads), 1)
-            url, arguments = client.uploads[0]
+            self.assertEqual(len(client.uploads), 9)
+            self.assertTrue(all(f"/values/history-v1-{i}" in client.uploads[i][0] for i in range(8)))
+            url, arguments = client.uploads[-1]
             self.assertTrue(url.endswith("/values/latest"))
             self.assertEqual(arguments["method"], "PUT")
             self.assertEqual(arguments["data"], output.read_bytes())

@@ -211,6 +211,9 @@ function startDashboard() {
       link.rel = 'noopener noreferrer';
       character.append(link);
       if (typeof card.series === 'string' && card.series) character.append(node('span', 'series', card.series));
+      const history = node('a', 'history-link', 'Price history');
+      history.href = `/history?card=${encodeURIComponent(String(card.id))}`;
+      character.append(history);
       const booster = node('td', '');
       for (const pool of pools) booster.append(node('span', `pool-label ${pool}`, pool === 'waifu' ? 'Waifus' : 'Husbandos'));
       tr.append(character, booster);

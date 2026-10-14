@@ -7,7 +7,7 @@ Run from the repository root:
     python scripts/update_prices.py --validate-only data/latest.json
 
 Upload uses CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and
-CLOUDFLARE_KV_NAMESPACE_ID, writing a single KV key named ``latest``.
+CLOUDFLARE_KV_NAMESPACE_ID, writing ``latest`` and eight compact history keys.
 The output is replaced only after every API response passes validation and,
 when requested, Cloudflare accepts the complete snapshot. No partial snapshot
 is published. This uses undocumented, public endpoints; schema/access changes
@@ -38,6 +38,8 @@ REQUEST_INTERVAL_SECONDS = 1.0
 MAX_RETRY_WAIT_SECONDS = 120.0
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_SAFE_INTEGER = 2**53 - 1
+HISTORY_BUCKETS = 8
+HISTORY_SECONDS = 30 * 24 * 60 * 60
 USER_AGENT = "KyaraMythicalPriceTracker/1.0 (read-only public price comparison)"
 
 
@@ -237,7 +239,8 @@ class JsonClient:
         return wait
 
     def request_json(self, url: str, *, method: str = "GET", data: bytes | None = None,
-                     headers: dict[str, str] | None = None, label: str = "Kyara", attempts: int = 3) -> Any:
+                     headers: dict[str, str] | None = None, label: str = "Kyara", attempts: int = 3,
+                     allow_missing: bool = False) -> Any:
         request_headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
         request_headers.update(headers or {})
         for attempt in range(attempts):
@@ -253,6 +256,8 @@ class JsonClient:
                 status = exc.code
                 retry_after = exc.headers.get("Retry-After") if exc.headers else None
                 exc.close()
+                if status == 404 and allow_missing and method == "GET":
+                    return None
                 if status in (401, 403):
                     raise UpdateError(f"{label} denied access (HTTP {status}); no retry was made.") from None
                 retryable = status == 429 or 500 <= status <= 599
@@ -301,10 +306,14 @@ def upload_credentials(environ: Any) -> dict[str, str]:
     return values
 
 
-def upload_snapshot(client: JsonClient, encoded: bytes, credentials: dict[str, str]) -> None:
+def kv_url(credentials: dict[str, str], key: str) -> str:
     account = credentials["CLOUDFLARE_ACCOUNT_ID"]
     namespace = credentials["CLOUDFLARE_KV_NAMESPACE_ID"]
-    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/storage/kv/namespaces/{namespace}/values/latest"
+    return f"https://api.cloudflare.com/client/v4/accounts/{account}/storage/kv/namespaces/{namespace}/values/{key}"
+
+
+def upload_snapshot(client: JsonClient, encoded: bytes, credentials: dict[str, str], key: str = "latest") -> None:
+    url = kv_url(credentials, key)
     # One upload attempt: a failed/ambiguous PUT is left for the next scheduled
     # run, avoiding repeated writes against the free KV allowance.
     result = client.request_json(url, method="PUT", data=encoded,
@@ -313,6 +322,83 @@ def upload_snapshot(client: JsonClient, encoded: bytes, credentials: dict[str, s
                                  label="Cloudflare", attempts=1)
     require(isinstance(result, dict) and result.get("success") is True,
             "Cloudflare did not confirm a successful KV write; local snapshot was not replaced.")
+
+
+def validate_history(history: Any, bucket: int) -> None:
+    require(isinstance(history, dict) and history.get("schemaVersion") == 1
+            and history.get("bucket") == bucket and history.get("bucketCount") == HISTORY_BUCKETS,
+            "Stored history has an unsupported format; refusing to overwrite it.")
+    stamp = int(parse_timestamp(history.get("updatedAt"), "History updatedAt").timestamp())
+    times = history.get("timestamps")
+    require(isinstance(times, list) and bool(times), "History timestamps are missing.")
+    require(all(type(t) is int and 0 < t <= MAX_SAFE_INTEGER for t in times)
+            and all(a < b for a, b in zip(times, times[1:])) and times[-1] == stamp,
+            "History timestamps must be ordered and unique.")
+    cards = history.get("cards")
+    require(isinstance(cards, dict), "History cards must be an object.")
+    for key, card in cards.items():
+        require(isinstance(key, str) and bool(re.fullmatch(r"[1-9][0-9]*", key))
+                and int(key) <= MAX_SAFE_INTEGER and int(key) % HISTORY_BUCKETS == bucket,
+                "History contains a card in the wrong bucket.")
+        require(isinstance(card, dict), "History contains an invalid card.")
+        nonempty_string(card.get("name"), "History card name")
+        require(isinstance(card.get("series"), str), "History series must be text.")
+        first, last = card.get("firstSeenAt"), card.get("lastSeenAt")
+        require(type(first) is int and type(last) is int and 0 < first <= last <= stamp,
+                "History card timestamps are invalid.")
+        for field in ("median7d", "median30d"):
+            values = card.get(field)
+            require(isinstance(values, list) and len(values) == len(times), "History prices and times are misaligned.")
+            for value in values:
+                number_or_null(value, "History price")
+
+
+def append_history(previous: Any, snapshot: dict[str, Any], bucket: int) -> dict[str, Any]:
+    """One shared timeline per bucket keeps 30 days compact, without losing any samples."""
+    stamp = int(parse_timestamp(snapshot["collectedAt"], "collectedAt").timestamp())
+    cutoff = stamp - HISTORY_SECONDS
+    if previous is not None:
+        validate_history(previous, bucket)
+        require(previous["timestamps"][-1] <= stamp, "New collection is older than stored history; refusing to overwrite it.")
+    old = previous or {"timestamps": [], "cards": {}}
+    # Replaying the same collection replaces that timestamp instead of duplicating it.
+    indices = [i for i, t in enumerate(old["timestamps"]) if cutoff <= t < stamp]
+    times = [old["timestamps"][i] for i in indices] + [stamp]
+    current = {str(c["id"]): c for c in snapshot["cards"] if c["id"] % HISTORY_BUCKETS == bucket}
+    cards = {}
+    for key in sorted(set(old["cards"]) | set(current), key=int):
+        before, card = old["cards"].get(key), current.get(key)
+        if card is None and before["lastSeenAt"] < cutoff:
+            continue
+        cards[key] = {
+            "name": card["name"] if card else before["name"],
+            "series": card["series"] if card else before["series"],
+            "firstSeenAt": before["firstSeenAt"] if before else stamp,
+            "lastSeenAt": stamp if card else before["lastSeenAt"],
+        }
+        for field in ("median7d", "median30d"):
+            cards[key][field] = ([before[field][i] for i in indices] if before else [None] * len(indices)) + [card[field] if card else None]
+    result = {"schemaVersion": 1, "bucket": bucket, "bucketCount": HISTORY_BUCKETS,
+              "updatedAt": snapshot["collectedAt"], "timestamps": times, "cards": cards}
+    validate_history(result, bucket)
+    return result
+
+
+def upload_history(client: JsonClient, snapshot: dict[str, Any], credentials: dict[str, str]) -> None:
+    pending = []
+    # Read/validate every bucket before writing anything. A failed read is never an empty history.
+    for bucket in range(HISTORY_BUCKETS):
+        key = f"history-v1-{bucket}"
+        previous = client.request_json(kv_url(credentials, key),
+                                       headers={"Authorization": "Bearer " + credentials["CLOUDFLARE_API_TOKEN"]},
+                                       label="Cloudflare history", allow_missing=True)
+        history = append_history(previous, snapshot, bucket)
+        encoded = (json.dumps(history, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n").encode("utf-8")
+        require(len(encoded) <= MAX_RESPONSE_BYTES, "History exceeds the supported size; refusing to truncate it.")
+        pending.append((key, encoded))
+    for key, encoded in pending:
+        upload_snapshot(client, encoded, credentials, key)
+    print(f"Saved 30-day price history ({HISTORY_BUCKETS} KV writes).", flush=True)
 
 
 def atomic_write(path: Path, data: bytes) -> None:
@@ -338,6 +424,7 @@ def run_update(output: Path, *, upload: bool = False, environ: Any = None,
     snapshot = collect_snapshot(client)
     encoded = (json.dumps(snapshot, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n").encode("utf-8")
     if credentials is not None:
+        upload_history(client, snapshot, credentials)
         upload_snapshot(client, encoded, credentials)
     atomic_write(Path(output), encoded)
     return snapshot
@@ -346,7 +433,7 @@ def run_update(output: Path, *, upload: bool = False, environ: Any = None,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", type=Path, default=Path("data/latest.json"), help="Atomic local output (default: data/latest.json).")
-    parser.add_argument("--upload", action="store_true", help="Publish the complete snapshot to Cloudflare KV key 'latest'.")
+    parser.add_argument("--upload", action="store_true", help="Append 30-day history and publish the complete snapshot to Cloudflare KV.")
     parser.add_argument("--validate-only", type=Path, metavar="PATH", help="Validate an existing snapshot without network access or writes.")
     args = parser.parse_args(argv)
     if args.validate_only is not None and args.upload:
@@ -360,7 +447,7 @@ def main(argv: list[str] | None = None) -> int:
             counts = ", ".join(f"{pool['name']}: {len(pool['cardIds'])}" for pool in snapshot["pools"])
             print(f"Saved {len(snapshot['cards'])} Mythical prices ({counts}) at {snapshot['collectedAt']}.")
             if args.upload:
-                print("Cloudflare KV accepted the complete snapshot (key: latest).")
+                print("Cloudflare KV accepted the history and complete snapshot (9 writes, including latest).")
         return 0
     except UpdateError as exc:
         print(f"Update stopped: {exc}", file=sys.stderr)
