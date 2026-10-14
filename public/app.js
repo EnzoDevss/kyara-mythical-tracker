@@ -3,6 +3,13 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const STALE_AFTER_MS = 90 * 60 * 1000;
 const isPrice = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 const isId = value => (typeof value === 'number' || typeof value === 'string') && /^\d+$/.test(String(value));
+const isChange = value => typeof value === 'number' && Number.isFinite(value);
+export function compareChanges(first, second, ascending = false) {
+  if (!isChange(first) && !isChange(second)) return 0;
+  if (!isChange(first)) return 1;
+  if (!isChange(second)) return -1;
+  return ascending ? first - second : second - first;
+}
 
 /** Validate enough of the public contract to reject an error page or unusable snapshot. */
 export function validateSnapshot(snapshot) {
@@ -86,7 +93,8 @@ if (typeof document !== 'undefined') startDashboard();
 
 function startDashboard() {
   const $ = id => document.getElementById(id);
-  const state = { snapshot: null, period: 7, origin: '', refreshing: false, lastCheckedAt: null, error: '' };
+  const state = { snapshot: null, period: 7, origin: '', refreshing: false, lastCheckedAt: null, error: '', changes: {}, changesRequest: 0 };
+  const cardChange = card => state.changes[String(card.id)]?.[state.period === 30 ? 'median30d' : 'median7d'];
   const numbers = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
   const means = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dates = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -186,6 +194,7 @@ function startDashboard() {
     const nameCompare = (a, b) => a.card.name.localeCompare(b.card.name);
     filtered.sort((a, b) => {
       if (sort === 'name') return nameCompare(a, b);
+      if (sort.startsWith('change-')) return compareChanges(cardChange(a.card), cardChange(b.card), sort === 'change-asc') || nameCompare(a, b);
       const field = sort === 'sales' ? 'sales30d' : key;
       const first = a.card[field];
       const second = b.card[field];
@@ -212,7 +221,7 @@ function startDashboard() {
       character.append(link);
       if (typeof card.series === 'string' && card.series) character.append(node('span', 'series', card.series));
       const history = node('a', 'history-link', 'Price history');
-      history.href = `/history?card=${encodeURIComponent(String(card.id))}`;
+      history.href = `/history?card=${encodeURIComponent(String(card.id))}&range=24h&metric=median${state.period}d`;
       character.append(history);
       const booster = node('td', '');
       for (const pool of pools) booster.append(node('span', `pool-label ${pool}`, pool === 'waifu' ? 'Waifus' : 'Husbandos'));
@@ -222,12 +231,14 @@ function startDashboard() {
         tr.append(node('td', `numeric${state.period === period ? ' selected-median' : ''}${!isPrice(value) ? ' missing' : ''}`, formatPrice(value)));
       }
       tr.append(node('td', `numeric${!isPrice(card.sales30d) ? ' missing' : ''}`, isPrice(card.sales30d) ? numbers.format(card.sales30d) : '—'));
+      const change = cardChange(card);
+      tr.append(node('td', `numeric change-value${!isChange(change) ? ' missing' : change > 0 ? ' gain' : change < 0 ? ' loss' : ''}`, isChange(change) ? `${change > 0 ? '+' : ''}${numbers.format(change)}%` : '—'));
       fragment.append(tr);
     }
     if (!rows.length) {
       const tr = node('tr', '');
       const td = node('td', 'empty-state', 'No cards match those filters. Try another character or choose both boosters.');
-      td.colSpan = 5;
+      td.colSpan = 6;
       tr.append(td);
       fragment.append(tr);
     }
@@ -248,6 +259,35 @@ function startDashboard() {
       return { snapshot, origin: response.headers.get('X-Snapshot-Origin') || snapshot.snapshotOrigin || '' };
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  async function refreshChanges() {
+    const ticket = ++state.changesRequest;
+    const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 20000);
+    state.changes = {};
+    $('changes-note').textContent = 'Loading 24h changes…';
+    renderTable();
+    try {
+      const buckets = await Promise.all(Array.from({ length: 8 }, async (_, bucket) => {
+        const response = await fetch(`/api/changes?bucket=${bucket}`, { cache: 'no-cache', signal: controller.signal });
+        if (!response.ok) throw new Error('History unavailable');
+        const data = await response.json();
+        if (data.schemaVersion !== 1 || data.bucket !== bucket || data.range !== '24h' || !data.cards || typeof data.cards !== 'object' || Array.isArray(data.cards)) throw new Error('Invalid changes');
+        for (const values of Object.values(data.cards)) {
+          if (!values || !['median7d', 'median30d'].every(key => values[key] === null || isChange(values[key]))) throw new Error('Invalid percentage');
+        }
+        return data.cards;
+      }));
+      if (ticket !== state.changesRequest) return;
+      state.changes = Object.assign({}, ...buckets);
+      $('changes-note').textContent = '24h change: first to last recorded sample within the past 24 hours, using the selected median. — means insufficient data or a zero starting price.';
+    } catch {
+      if (ticket !== state.changesRequest) return;
+      $('changes-note').textContent = '24h changes are temporarily unavailable. Select “Check for updates” to retry.';
+    } finally {
+      clearTimeout(timeout);
+      if (ticket === state.changesRequest) renderTable();
     }
   }
 
@@ -292,6 +332,7 @@ function startDashboard() {
       renderFreshness();
       renderComparison();
       renderTable();
+      if (state.snapshot) refreshChanges();
     }
   }
 
@@ -308,8 +349,9 @@ function startDashboard() {
   }
   $('download').addEventListener('click', () => {
     if (!state.snapshot) return;
-    const header = ['Character', 'Series', 'Booster', '7-day median (chakra)', '30-day median (chakra)', '30-day sales', 'Collected at (UTC)', 'Source'];
+    const header = ['Character', 'Series', 'Booster', '7-day median (chakra)', '30-day median (chakra)', '30-day sales', 'Collected at (UTC)', 'Source', `24h change (%) - ${state.period}-day median`];
     const lines = getRows().map(({ card, pools }) => [card.name, typeof card.series === 'string' ? card.series : '', pools.map(id => id === 'waifu' ? 'Waifus' : 'Husbandos').join(' / '), card.median7d, card.median30d, card.sales30d, state.snapshot.collectedAt, `https://kyara.games/wiki/${card.id}`]);
+    getRows().forEach(({ card }, index) => lines[index].push(cardChange(card)));
     const csv = '\uFEFF' + [header, ...lines].map(row => row.map(csvCell).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = node('a', '');

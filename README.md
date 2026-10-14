@@ -26,6 +26,8 @@ The page checks the stored snapshot every five minutes while open. **Check for u
 
 ## Price history
 
+The comparison table includes **24h change**, with high-to-low and low-to-high sort options and a CSV column. It uses the history chart's first-to-last sample percentage within the past 24 hours for the selected 7-day or 30-day market median. Fewer than two observations, missing endpoint prices, or a zero starting price display as unavailable and sort last. Eight small `/api/changes?bucket=0` through `bucket=7` requests read the existing history on each dashboard refresh; no new source collection or storage writes are needed.
+
 Open **Price history** in the navigation, or follow a card's **Price history** link in the comparison table. Search by card or series, select a card, then choose **24 hours**, **7 days**, or **30 days**. The separate **Price tracked** control selects the 7-day or 30-day market median to plot. Chart windows do not recalculate those medians. Hover, tap, or use the arrow keys to inspect a point; the observations table lists exact values.
 
 Every complete collection with `--upload` saves both market medians, even if unchanged. Manual runs add observations too. The collector retains a rolling 30 days and removes older points during subsequent updates. A brand-new installation starts empty: neither the seed nor previous snapshot-only updates contain recoverable price history. One observation displays as a dot until more arrive. Missing medians stay missing, and gaps over 90 minutes break the line.

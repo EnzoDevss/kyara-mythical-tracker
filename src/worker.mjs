@@ -1,4 +1,4 @@
-import { historyResponse } from './history.mjs';
+import { historyResponse, changesResponse } from './history.mjs';
 // This Worker only serves stored public data. It cannot collect, buy, or open cards.
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -26,6 +26,7 @@ export default {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     if (url.pathname === '/api/history') return historyResponse(request, env);
+    if (url.pathname === '/api/changes') return changesResponse(request, env);
     if (url.pathname !== '/api/prices') return error('Unknown endpoint.', 404);
     if (!['GET', 'HEAD'].includes(request.method)) return error('Read-only endpoint.', 405, { Allow: 'GET, HEAD' });
 

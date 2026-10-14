@@ -1,3 +1,4 @@
+import { summarizeHistory } from '../public/history-data.js';
 const RANGES = { '24h': 86400, '7d': 7 * 86400, '30d': 30 * 86400 };
 const BUCKETS = 8;
 const price = value => value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0);
@@ -52,6 +53,32 @@ export function selectHistory(history, id, range, now = Date.now()) {
     }
   });
   return result;
+}
+
+export async function changesResponse(request, env, now = Date.now()) {
+  const head = request.method === 'HEAD';
+  if (!['GET', 'HEAD'].includes(request.method)) return reply({ error: 'Read-only endpoint.' }, 405);
+  const rawBucket = new URL(request.url).searchParams.get('bucket');
+  if (!/^[0-7]$/.test(rawBucket ?? '')) return reply({ error: 'Invalid history bucket.' }, 400, head);
+  const bucket = Number(rawBucket);
+  try {
+    if (!env.PRICES) throw new Error('Missing binding');
+    const raw = await env.PRICES.get(`history-v1-${bucket}`, { type: 'text', cacheTtl: 60 });
+    const history = raw === null ? null : JSON.parse(raw);
+    // Validate even an empty bucket, then reuse the chart's exact window and percentage rules.
+    selectHistory(history, bucket || 8, '24h', now);
+    const cards = {};
+    for (const key of Object.keys(history?.cards || {})) {
+      const id = Number(key);
+      if (!Number.isSafeInteger(id) || id <= 0 || id % BUCKETS !== bucket) throw new Error('Invalid card');
+      const data = selectHistory(history, id, '24h', now);
+      cards[key] = { median7d: summarizeHistory(data.points, 'median7d').percent,
+        median30d: summarizeHistory(data.points, 'median30d').percent };
+    }
+    return reply({ schemaVersion: 1, bucket, range: '24h', calculatedAt: new Date(now).toISOString(), cards }, 200, head);
+  } catch {
+    return reply({ error: 'Price changes are temporarily unavailable.' }, 503, head);
+  }
 }
 
 export async function historyResponse(request, env, now = Date.now()) {

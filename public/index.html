@@ -7,8 +7,8 @@
   <meta name="description" content="Compare Waifus and Husbandos Mythical card prices with a transparent, automatically refreshed Kyara market dashboard.">
   <title>Kyara Mythical Market</title>
   <link rel="stylesheet" href="/styles.css">
-  <link rel="stylesheet" href="/history.css">
-  <script type="module" src="/app.js"></script>
+  <link rel="stylesheet" href="/history.css?v=changes-1">
+  <script type="module" src="/app.js?v=changes-1"></script>
 </head>
 <body>
   <a class="skip-link" href="#card-list">Skip to card prices</a>
@@ -53,16 +53,17 @@
         <div class="filters">
           <label class="search-label"><span class="sr-only">Search characters or series</span><span class="search-icon" aria-hidden="true">⌕</span><input id="search" type="search" autocomplete="off" placeholder="Search a character or series…"></label>
           <label><span class="sr-only">Filter booster</span><select id="pool"><option value="">Both boosters</option><option value="waifu">Waifus</option><option value="husbando">Husbandos</option></select></label>
-          <label><span class="sr-only">Sort cards</span><select id="sort"><option value="price-desc">Selected median: high to low</option><option value="price-asc">Selected median: low to high</option><option value="name">Character: A to Z</option><option value="sales">30-day sales: high to low</option></select></label>
+          <label><span class="sr-only">Sort cards</span><select id="sort"><option value="price-desc">Selected median: high to low</option><option value="price-asc">Selected median: low to high</option><option value="change-desc">24h change: high to low</option><option value="change-asc">24h change: low to high</option><option value="name">Character: A to Z</option><option value="sales">30-day sales: high to low</option></select></label>
         </div>
         <p id="result-count" class="result-count" aria-live="polite">Loading card list…</p>
         <div class="table-wrap" tabindex="0" role="region" aria-label="Mythical card prices; scroll horizontally on small screens">
           <table>
             <caption class="sr-only">Card prices in chakra, with Kyara source links and reported sales counts.</caption>
-            <thead><tr><th scope="col">Character <span class="subtle">/ source</span></th><th scope="col">Booster</th><th scope="col" class="numeric" id="median-7-header">7-day median <span>◆</span></th><th scope="col" class="numeric" id="median-30-header">30-day median <span>◆</span></th><th scope="col" class="numeric"><abbr title="The sales count Kyara reports for the 30-day window. It is not the 7-day median’s sample size.">30-day sales</abbr></th></tr></thead>
-            <tbody id="card-rows"><tr><td colspan="5" class="empty-state">Your saved snapshot will appear here.</td></tr></tbody>
+            <thead><tr><th scope="col">Character <span class="subtle">/ source</span></th><th scope="col">Booster</th><th scope="col" class="numeric" id="median-7-header">7-day median <span>◆</span></th><th scope="col" class="numeric" id="median-30-header">30-day median <span>◆</span></th><th scope="col" class="numeric"><abbr title="The sales count Kyara reports for the 30-day window. It is not the 7-day median’s sample size.">30-day sales</abbr></th><th scope="col" class="numeric"><abbr title="Percentage change from the first to last recorded sample in the past 24 hours, for the selected market median.">24h change</abbr></th></tr></thead>
+            <tbody id="card-rows"><tr><td colspan="6" class="empty-state">Your saved snapshot will appear here.</td></tr></tbody>
           </table>
         </div>
+        <p id="changes-note" class="table-footnote" role="status">Loading 24h changes…</p>
         <p class="table-footnote">— means unavailable. Open a character’s name for its Kyara page. CSV exports the rows currently shown.</p>
       </section>
 
