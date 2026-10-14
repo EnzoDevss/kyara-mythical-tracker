@@ -94,6 +94,14 @@ function selectPoint(index) {
   const dot = dots[state.selected];
   $('chart-cursor').setAttribute('x1', dot.x); $('chart-cursor').setAttribute('x2', dot.x);
   $('chart-selection').setAttribute('cx', dot.x); $('chart-selection').setAttribute('cy', dot.y);
+  const label = $('chart-price-text');
+  label.textContent = money(dot.value);
+  const labelWidth = label.getComputedTextLength() + 20;
+  const x = Math.max(state.model.left, Math.min(dot.x - labelWidth / 2, state.model.right - labelWidth));
+  const y = Math.max(0, dot.y - 40);
+  $('chart-price-label').setAttribute('transform', `translate(${x},${y})`);
+  $('chart-price-background').setAttribute('width', labelWidth);
+  label.setAttribute('x', labelWidth / 2);
   $('point-readout').textContent = `${date.format(new Date(dot.at))} · ${money(dot.value)} · ${state.metric === 'median7d' ? '7' : '30'}-day market median`;
 }
 
@@ -135,6 +143,9 @@ function drawChart() {
     }
   });
   fragment.append(svg('line', { id: 'chart-cursor', y1: model.top, y2: model.bottom, class: 'chart-cursor' }), svg('circle', { id: 'chart-selection', r: 5, class: 'chart-selection' }));
+  const priceLabel = svg('g', { id: 'chart-price-label', class: 'chart-price-label', 'aria-hidden': 'true' });
+  priceLabel.append(svg('rect', { id: 'chart-price-background', height: 26, rx: 6 }), svg('text', { id: 'chart-price-text', y: 17, 'text-anchor': 'middle' }));
+  fragment.append(priceLabel);
   root.replaceChildren(fragment);
   selectPoint(model.dots.length - 1);
 }
