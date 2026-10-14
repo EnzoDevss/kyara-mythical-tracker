@@ -134,6 +134,12 @@ function drawChart() {
     const fraction = i / (count - 1), time = Date.parse(data.windowStart) + fraction * RANGE_SECONDS[state.range] * 1000;
     fragment.append(svg('text', { x: model.left + fraction * (model.right - model.left), y: model.bottom + 27, 'text-anchor': i === 0 ? 'start' : i === count - 1 ? 'end' : 'middle', class: 'chart-axis' }, axisDate.format(new Date(time))));
   }
+  const defs = svg('defs', {});
+  const gradient = svg('linearGradient', { id: 'price-gradient', gradientUnits: 'userSpaceOnUse', x1: model.dots[0].x, x2: Math.max(model.dots[0].x + 1, model.dots.at(-1).x), y1: 0, y2: 0 });
+  gradient.append(svg('stop', { offset: '0%', 'stop-color': '#ff4b2b' }), svg('stop', { offset: '100%', 'stop-color': '#f5cb16' }));
+  const labelGradient = svg('linearGradient', { id: 'price-label-gradient', x1: '0%', x2: '100%' });
+  labelGradient.append(svg('stop', { offset: '0%', 'stop-color': '#ff6548' }), svg('stop', { offset: '100%', 'stop-color': '#f5cb16' }));
+  defs.append(gradient, labelGradient); fragment.append(defs);
   for (const path of model.paths) fragment.append(svg('path', { d: path, class: 'chart-line' }));
   // Keep dense charts legible while still showing isolated observations.
   model.dots.forEach((dot, index, dots) => {
