@@ -24,8 +24,14 @@
         <p class="hero-copy">Follow your Mythicals through every market update. Choose a card to explore its recorded price history.</p>
       </section>
       <section class="card-picker" aria-label="Choose a Mythical card">
-        <label for="card-search">Find a card<input type="search" id="card-search" placeholder="Search character or series…" autocomplete="off"></label>
-        <label for="card-select">Mythical card<select id="card-select" disabled><option>Loading cards…</option></select></label>
+        <div class="card-search-wrap">
+          <label for="card-search">Find a card</label>
+          <input type="search" id="card-search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="card-results" aria-describedby="picker-note" placeholder="Search character or series…" autocomplete="off" disabled>
+          <div id="card-suggestions" class="card-suggestions" hidden>
+            <ul id="card-results" role="listbox" aria-label="Matching characters"></ul>
+            <p id="card-no-results" hidden>No matching characters. Try another name or series.</p>
+          </div>
+        </div>
         <p id="picker-note" class="muted" aria-live="polite">Loading the current booster pools.</p>
       </section>
       <div id="history-alert" class="notice" role="status" hidden></div>

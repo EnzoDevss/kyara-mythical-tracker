@@ -19,17 +19,47 @@ async function jsonFetch(url, signal) {
   return response.json();
 }
 
+let cardMatches = [], activeCard = -1;
+function closeOptions() {
+  $('card-suggestions').hidden = true;
+  $('card-search').setAttribute('aria-expanded', 'false');
+  $('card-search').removeAttribute('aria-activedescendant');
+  activeCard = -1;
+}
+function chooseCard(card) {
+  state.cardId = String(card.id);
+  $('card-search').value = card.name;
+  closeOptions(); renderCard(); syncUrl(); loadHistory();
+  $('picker-note').textContent = `${card.name} selected. Type to find another character or series.`;
+}
+function highlightCard(index) {
+  activeCard = index;
+  for (const [i, option] of [...$('card-results').children].entries()) option.setAttribute('aria-selected', String(i === index));
+  const option = $('card-results').children[index];
+  if (option) {
+    $('card-search').setAttribute('aria-activedescendant', option.id);
+    option.scrollIntoView({ block: 'nearest' });
+  }
+}
 function renderOptions() {
   const query = $('card-search').value.trim().toLocaleLowerCase();
-  const matches = state.cards.filter(card => `${card.name} ${card.series}`.toLocaleLowerCase().includes(query));
+  cardMatches = state.cards.filter(card => `${card.name} ${card.series}`.toLocaleLowerCase().includes(query));
+  activeCard = -1;
+  $('card-search').removeAttribute('aria-activedescendant');
   const fragment = document.createDocumentFragment();
-  const placeholder = element('option', matches.length ? 'Select a Mythical…' : 'No matching cards');
-  placeholder.value = ''; placeholder.disabled = true; fragment.append(placeholder);
-  for (const card of matches) { const option = element('option', `${card.name} · ${card.series || 'Mythical'}`); option.value = card.id; fragment.append(option); }
-  $('card-select').replaceChildren(fragment);
-  $('card-select').value = matches.some(card => String(card.id) === state.cardId) ? state.cardId : '';
-  $('card-select').disabled = !matches.length;
-  $('picker-note').textContent = `${matches.length} of ${state.cards.length} Mythicals${query ? ' match your search. Choose a result to change the chart.' : ' across the Waifus and Husbandos boosters.'}`;
+  for (const card of cardMatches) {
+    const option = element('li', undefined, 'card-option');
+    option.id = `card-option-${card.id}`; option.setAttribute('role', 'option'); option.setAttribute('aria-selected', 'false');
+    option.append(element('span', card.name, 'card-option-name'), element('span', card.series || 'Mythical', 'card-option-series'));
+    option.addEventListener('pointerdown', event => event.preventDefault());
+    option.addEventListener('click', () => chooseCard(card));
+    fragment.append(option);
+  }
+  $('card-results').replaceChildren(fragment);
+  $('card-no-results').hidden = cardMatches.length !== 0;
+  $('card-suggestions').hidden = false;
+  $('card-search').setAttribute('aria-expanded', 'true');
+  $('picker-note').textContent = `${cardMatches.length} matching characters. Choose a result, or use the arrow keys and Enter.`;
 }
 
 function renderCard() {
@@ -163,7 +193,20 @@ async function start() {
   $('metric').value = state.metric;
   $('metric').addEventListener('change', () => { state.metric = $('metric').value; syncUrl(); drawChart(); });
   $('card-search').addEventListener('input', renderOptions);
-  $('card-select').addEventListener('change', () => { state.cardId = $('card-select').value; $('card-search').value = ''; renderOptions(); renderCard(); syncUrl(); loadHistory(); });
+  $('card-search').addEventListener('focus', () => { $('card-search').select(); renderOptions(); });
+  $('card-search').addEventListener('click', () => { if ($('card-suggestions').hidden) renderOptions(); });
+  $('card-search').addEventListener('blur', closeOptions);
+  $('card-search').addEventListener('keydown', event => {
+    if (event.isComposing) return;
+    if (event.key === 'Escape') { event.preventDefault(); closeOptions(); return; }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if ($('card-suggestions').hidden) renderOptions();
+      if (cardMatches.length) highlightCard((activeCard + (event.key === 'ArrowDown' ? 1 : activeCard < 0 ? 0 : -1) + cardMatches.length) % cardMatches.length);
+    } else if (event.key === 'Enter' && !$('card-suggestions').hidden && cardMatches.length) {
+      event.preventDefault(); chooseCard(cardMatches[Math.max(0, activeCard)]);
+    }
+  });
   $('history-refresh').addEventListener('click', () => state.cards.length ? loadHistory() : location.reload());
   $('observation-details').addEventListener('toggle', renderTable);
   $('history-chart').addEventListener('pointermove', event => {
@@ -187,7 +230,10 @@ async function start() {
     if (!state.cards.length) throw new Error('No cards');
     if (!state.cardId) state.cardId = String(state.cards[0].id);
     if (!/^[1-9][0-9]*$/.test(state.cardId) || !Number.isSafeInteger(Number(state.cardId))) throw new Error('Invalid card');
-    renderOptions(); renderCard(); syncUrl(); await loadHistory();
+    $('card-search').disabled = false;
+    $('card-search').value = state.cards.find(card => String(card.id) === state.cardId)?.name || '';
+    $('picker-note').textContent = `Search ${state.cards.length} Mythicals by character or series.`;
+    renderCard(); syncUrl(); await loadHistory();
   } catch {
     notice('Could not load the card list. Refresh this page to try again.');
     showEmpty('Card list unavailable', 'The saved market snapshot could not be loaded.');
