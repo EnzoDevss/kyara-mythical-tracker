@@ -1,0 +1,37 @@
+name: Update prices
+
+on:
+  workflow_dispatch:
+  schedule:
+    # UTC; avoid the busiest part of the hour. Requires ENABLE_SCHEDULE=true.
+    - cron: '13,43 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyara-price-updater
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.event_name == 'workflow_dispatch' || vars.ENABLE_SCHEDULE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Check updater
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Collect a complete snapshot and upload to Cloudflare KV
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
+        run: python scripts/update_prices.py --output data/latest.json --upload

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123f35">
+  <meta name="description" content="Compare Waifus and Husbandos Mythical card prices with a transparent, automatically refreshed Kyara market dashboard.">
+  <title>Kyara Mythical Market</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#card-list">Skip to card prices</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="brand" href="/" aria-label="Kyara Mythical Market home"><span class="brand-mark" aria-hidden="true">◆</span><span>KYARA<span class="brand-sub">MYTHICAL MARKET</span></span></a>
+      <a class="external-link" href="https://kyara.games/" target="_blank" rel="noopener noreferrer">Open Kyara <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">WAIFUS / HUSBANDOS</p>
+          <h1 id="page-title">Your next pull,<br><span>by the numbers.</span></h1>
+          <p class="hero-copy">Every Mythical. Both boosters. One clear comparison of their historical market prices.</p>
+        </div>
+        <div class="hero-note"><span class="large-diamond" aria-hidden="true">◆</span><p>All values in <strong>chakra</strong><br><span>Kyara’s in-game currency</span></p></div>
+      </section>
+
+      <section class="status-bar" aria-label="Data update status">
+        <div><span id="status-pill" class="status-pill pending">Loading snapshot</span><p id="updated-at">Connecting to the saved price snapshot…</p></div>
+        <button type="button" id="refresh" class="button button-quiet">Check for updates <span aria-hidden="true">↻</span></button>
+      </section>
+      <p class="update-note" id="update-note">Open this through the local preview server or your Cloudflare URL. Double-clicking the HTML file does not run the updater.</p>
+      <div id="alert" class="notice" role="status" hidden></div>
+      <noscript><p class="notice">JavaScript is needed to load prices and calculate this comparison. Enable it, then reload this page.</p></noscript>
+
+      <section class="comparison-section" aria-labelledby="comparison-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">THE COMPARISON</p><h2 id="comparison-title">Average Mythical value</h2></div>
+          <fieldset class="period-control"><legend class="sr-only">Price median period</legend><label><input type="radio" name="period" value="7" checked><span>7-day medians</span></label><label><input type="radio" name="period" value="30"><span>30-day medians</span></label></fieldset>
+        </div>
+        <div class="comparison-grid" id="pool-cards" aria-live="polite" aria-busy="true">
+          <article class="pool-card skeleton"><p class="eyebrow">WAIFUS</p><p class="big-number">— <span>◆</span></p><p class="muted">Waiting for card prices</p></article>
+          <article class="pool-card skeleton"><p class="eyebrow">HUSBANDOS</p><p class="big-number">— <span>◆</span></p><p class="muted">Waiting for card prices</p></article>
+        </div>
+        <div class="verdict" id="verdict" aria-live="polite"><span class="verdict-icon" aria-hidden="true">↗</span><div><h3 id="verdict-title">A recommendation once prices load.</h3><p id="verdict-copy">The average gives every eligible Mythical equal weight.</p></div></div>
+      </section>
+
+      <section class="list-section" id="card-list" aria-labelledby="list-title">
+        <div class="section-heading"><div><p class="eyebrow">EXPLORE THE POOLS</p><h2 id="list-title">Every Mythical, accounted for.</h2></div><button type="button" id="download" class="button button-outline" disabled>Export CSV <span aria-hidden="true">↓</span></button></div>
+        <div class="filters">
+          <label class="search-label"><span class="sr-only">Search characters or series</span><span class="search-icon" aria-hidden="true">⌕</span><input id="search" type="search" autocomplete="off" placeholder="Search a character or series…"></label>
+          <label><span class="sr-only">Filter booster</span><select id="pool"><option value="">Both boosters</option><option value="waifu">Waifus</option><option value="husbando">Husbandos</option></select></label>
+          <label><span class="sr-only">Sort cards</span><select id="sort"><option value="price-desc">Selected median: high to low</option><option value="price-asc">Selected median: low to high</option><option value="name">Character: A to Z</option><option value="sales">30-day sales: high to low</option></select></label>
+        </div>
+        <p id="result-count" class="result-count" aria-live="polite">Loading card list…</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Mythical card prices; scroll horizontally on small screens">
+          <table>
+            <caption class="sr-only">Card prices in chakra, with Kyara source links and reported sales counts.</caption>
+            <thead><tr><th scope="col">Character <span class="subtle">/ source</span></th><th scope="col">Booster</th><th scope="col" class="numeric" id="median-7-header">7-day median <span>◆</span></th><th scope="col" class="numeric" id="median-30-header">30-day median <span>◆</span></th><th scope="col" class="numeric"><abbr title="The sales count Kyara reports for the 30-day window. It is not the 7-day median’s sample size.">30-day sales</abbr></th></tr></thead>
+            <tbody id="card-rows"><tr><td colspan="5" class="empty-state">Your saved snapshot will appear here.</td></tr></tbody>
+          </table>
+        </div>
+        <p class="table-footnote">— means unavailable. Open a character’s name for its Kyara page. CSV exports the rows currently shown.</p>
+      </section>
+
+      <details class="method">
+        <summary>How the comparison works <span aria-hidden="true">+</span></summary>
+        <div class="method-grid">
+          <div><h3>Mean of card medians</h3><p>For the selected 7- or 30-day window, add the market median of each Mythical in a booster and divide by the number with a known price. Every eligible card receives equal weight. The middle card’s price is a separate statistic shown below each average.</p><p>Missing prices are excluded, never treated as zero. Coverage includes every card in the booster’s Mythical pool; a recommendation is withheld if either pool has missing prices.</p></div>
+          <div><h3>What this tells you</h3><p>The higher average favors a booster on Mythical prices alone, assuming equal Mythical drop odds between boosters and equal likelihood of each Mythical within its pool. Those within-rarity weights have not been verified.</p><p>This is not a full booster return calculation. It excludes other rarities, fees, special variants, and how quickly a card sells. Historical medians do not guarantee a future sale price.</p></div>
+          <div><h3>Sources and freshness</h3><p>The collector uses Kyara’s public website endpoints to discover both pools and read card prices. They are undocumented and may change. The bundled starter snapshot was collected separately from the website.</p><p>This page checks your hosted snapshot every five minutes while visible. “Check for updates” reads that saved snapshot; it does not request a new collection from Kyara. Collection runs on your configured schedule.</p><p><a href="https://kyara.games/" target="_blank" rel="noopener noreferrer">Kyara boosters ↗</a> <a href="https://kyara.games/raretes" target="_blank" rel="noopener noreferrer">Rarity information ↗</a></p></div>
+        </div>
+      </details>
+    </main>
+
+    <footer><p>An independent community tracker. Not affiliated with Kyara.</p><p>MYTHICAL MARKET <span aria-hidden="true">◆</span></p></footer>
+  </div>
+</body>
+</html>

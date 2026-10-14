@@ -1,0 +1,22 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "kyara-mythical-tracker",
+	"main": "src/worker.mjs",
+	"compatibility_date": "2026-10-14",
+	"workers_dev": true,
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS",
+		"run_worker_first": [
+			"/api/*"
+		]
+	},
+	"kv_namespaces": [
+		{
+			"binding": "PRICES",
+			// Replace this placeholder with the ID from: npx wrangler kv namespace create PRICES
+			"id": "6660ff117f254e77aa68d9c02a7f2b50",
+			"remote": true
+		}
+	]
+}
