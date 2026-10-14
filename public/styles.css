@@ -8,4 +8,4 @@
 /* Kyara-inspired dark palette: orange actions, purple pools, cyan chakra. */
 h1,h2,.big-number{font-weight:800}.brand-mark{border-radius:50%;color:var(--green);background:#2d1918;border-color:#88402e}.large-diamond{color:#43d9ff;text-shadow:none}.period-control input:checked+span{background:#eeece7;color:#0d0c11}.button:hover:not(:disabled){background:#302237}.pool-card,.chart-panel{box-shadow:0 10px 30px #00000016}.eyebrow{font-family:Consolas,monospace}.verdict{background:#21182b}.pool-card .big-number span{color:#43d9ff}
 
-.brand-mark{width:44px;height:44px;flex:0 0 44px;font-size:0;line-height:1}.brand-mark::before{content:"";width:15px;height:15px;background:var(--green);transform:rotate(45deg)}.status-pill.fresh{background:#173027;color:#44d79a}td.selected-median{background:#ff654808}
+.brand-mark{width:44px;height:44px;flex:0 0 44px;font-size:0;line-height:1}.brand-mark{position:relative}.brand-mark::before{content:"";position:absolute;left:50%;top:50%;width:15px;height:15px;background:var(--green);transform:translate(-50%,-50%) rotate(45deg)}.status-pill.fresh{background:#173027;color:#44d79a}td.selected-median{background:#ff654808}
