@@ -198,7 +198,7 @@ async function loadHistory(force = false) {
       if (ticket !== state.request) return;
       if (next?.schemaVersion !== 1 || !Array.isArray(next.cards) || !Array.isArray(next.pools)) throw new Error('Invalid catalog');
       state.snapshot = next; state.catalogCheckedAt = Date.now();
-      state.cards = next.cards.filter(card => Number.isSafeInteger(card.id) && card.id > 0 && typeof card.name === 'string').sort((a,b) => a.name.localeCompare(b.name));
+      state.cards = next.cards.filter(card => Number.isSafeInteger(card.id) && card.id > 0 && typeof card.name === 'string').sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.name.localeCompare(b.name));
       state.pools = next.pools;
     }
     const snapshot = state.snapshot;
@@ -259,7 +259,7 @@ async function start() {
     const snapshot = await jsonFetch('/api/prices', controller.signal);
     if (snapshot?.schemaVersion !== 1 || !Array.isArray(snapshot.cards) || !Array.isArray(snapshot.pools)) throw new Error('Invalid catalog');
     state.snapshot = snapshot; state.catalogCheckedAt = Date.now();
-    state.cards = snapshot.cards.filter(card => Number.isSafeInteger(card.id) && card.id > 0 && typeof card.name === 'string').sort((a, b) => a.name.localeCompare(b.name));
+    state.cards = snapshot.cards.filter(card => Number.isSafeInteger(card.id) && card.id > 0 && typeof card.name === 'string').sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.name.localeCompare(b.name));
     state.pools = snapshot.pools;
     if (!state.cards.length) throw new Error('No cards');
     if (!state.cardId) state.cardId = String(state.cards[0].id);
