@@ -55,9 +55,16 @@ export function chartModel(data, metric, width = 900) {
   const padding = Math.max((max - min) * 0.15, max * 0.015, 1);
   const floor = Math.max(0, min - padding), ceiling = max + padding;
   const start = Date.parse(data.windowStart), span = Date.parse(data.windowEnd) - start;
-  const dots = [], paths = [];
+  const dots = [], paths = [], areas = [];
   let segment = [], previousTime = null;
-  const flush = () => { if (segment.length) paths.push(smoothPath(segment)); segment = []; };
+  const flush = () => {
+    if (segment.length) {
+      const path = smoothPath(segment);
+      paths.push(path);
+      if (segment.length > 1) areas.push(`${path} L${segment.at(-1).x.toFixed(2)},${bottom} L${segment[0].x.toFixed(2)},${bottom} Z`);
+    }
+    segment = [];
+  };
   data.points.forEach((point, index) => {
     const time = Date.parse(point.at), value = point[metric];
     if (!isPrice(value)) { flush(); previousTime = null; return; }
@@ -70,5 +77,5 @@ export function chartModel(data, metric, width = 900) {
   });
   flush();
   const ticks = Array.from({ length: 5 }, (_, index) => ({ y: bottom - index / 4 * (bottom - top), value: floor + index / 4 * (ceiling - floor) }));
-  return { paths, dots, ticks, left, right, top, bottom };
+  return { paths, areas, dots, ticks, left, right, top, bottom };
 }

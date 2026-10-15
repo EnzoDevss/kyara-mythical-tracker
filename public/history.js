@@ -1,5 +1,5 @@
 const rarityNames = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
-import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel } from './history-data.js?v=smooth-1';
+import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel } from './history-data.js?v=area-1';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -136,6 +136,11 @@ function drawChart() {
     const fraction = i / (count - 1), time = Date.parse(data.windowStart) + fraction * RANGE_SECONDS[state.range] * 1000;
     fragment.append(svg('text', { x: model.left + fraction * (model.right - model.left), y: model.bottom + 27, 'text-anchor': i === 0 ? 'start' : i === count - 1 ? 'end' : 'middle', class: 'chart-axis' }, axisDate.format(new Date(time))));
   }
+  const defs = svg('defs', {});
+  const gradient = svg('linearGradient', { id: 'chart-area-fill', x1: 0, y1: model.top, x2: 0, y2: model.bottom, gradientUnits: 'userSpaceOnUse' });
+  gradient.append(svg('stop', { offset: '0%', 'stop-color': '#ff6548', 'stop-opacity': 0.28 }), svg('stop', { offset: '100%', 'stop-color': '#ff6548', 'stop-opacity': 0.02 }));
+  defs.append(gradient); fragment.append(defs);
+  for (const area of model.areas || []) fragment.append(svg('path', { d: area, fill: 'url(#chart-area-fill)', 'pointer-events': 'none' }));
   for (const path of model.paths) fragment.append(svg('path', { d: path, class: 'chart-line' }));
   // Keep dense charts legible while still showing isolated observations.
   model.dots.forEach((dot, index, dots) => {
