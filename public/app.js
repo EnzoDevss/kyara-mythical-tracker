@@ -5,7 +5,7 @@ export function cardBoosters(card, snapshot) {
     : POOL_IDS.filter(id => snapshot.pools.some(pool => pool.id === id && pool.cardIds.some(key => String(key) === String(card.id))));
   return memberships.length ? memberships : [...POOL_IDS];
 }
-export const boosterLabel = pools => pools.length === 2 ? 'Both' : pools[0] === 'waifu' ? 'Waifu' : 'Husbando';
+export const boosterLabel = pools => pools.length === 2 ? 'Shōnen Mix' : pools[0] === 'waifu' ? 'Waifu' : 'Husbando';
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const STALE_AFTER_MS = 90 * 60 * 1000;
 const isPrice = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;

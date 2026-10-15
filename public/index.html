@@ -8,7 +8,7 @@
   <title>Kyara Market Tracker</title>
   <link rel="stylesheet" href="/styles.css?v=top1000-1">
   <link rel="stylesheet" href="/history.css?v=top1000-1">
-  <script type="module" src="/app.js?v=boosters-1"></script>
+  <script type="module" src="/app.js?v=boosters-2"></script>
 </head>
 <body>
   <a class="skip-link" href="#card-list">Skip to card prices</a>
@@ -53,20 +53,20 @@
         <div class="filters">
           <label class="search-label"><span class="sr-only">Search characters or series</span><span class="search-icon" aria-hidden="true">⌕</span><input id="search" type="search" autocomplete="off" placeholder="Search a character or series…"></label>
           <label><span class="sr-only">Filter rarity</span><select id="rarity"><option value="">All rarities</option><option value="M">Mythical</option><option value="L">Legendary</option><option value="E">Epic</option><option value="R">Rare</option><option value="U">Uncommon</option><option value="C">Common</option></select></label>
-          <label><span class="sr-only">Filter booster</span><select id="pool"><option value="">All cards</option><option value="waifu">Waifu</option><option value="husbando">Husbando</option><option value="both">Both</option></select></label>
+          <label><span class="sr-only">Filter booster</span><select id="pool"><option value="">All cards</option><option value="waifu">Waifu</option><option value="husbando">Husbando</option><option value="both">Shōnen Mix</option></select></label>
           <label><span class="sr-only">Sort cards</span><select id="sort"><option value="rank">Wiki rank: 1 to 1,000</option><option value="price-desc">Selected median: high to low</option><option value="price-asc">Selected median: low to high</option><option value="change-desc">24h change: high to low</option><option value="change-asc">24h change: low to high</option><option value="name">Character: A to Z</option><option value="sales">30-day sales: high to low</option></select></label>
         </div>
         <p id="result-count" class="result-count" aria-live="polite">Loading card list…</p>
         <div class="table-wrap" tabindex="0" role="region" aria-label="Card prices; scroll horizontally on small screens">
           <table>
             <caption class="sr-only">Card prices in chakra, with Kyara source links and reported sales counts.</caption>
-            <thead><tr><th scope="col">Wiki rank / character <span class="subtle">/ source</span></th><th scope="col">Rarity</th><th scope="col"><abbr title="Waifu or Husbando booster membership across all rarities. Both means listed in both boosters or neither.">Booster</abbr></th><th scope="col" class="numeric" id="median-7-header">7-day median <span>◆</span></th><th scope="col" class="numeric" id="median-30-header">30-day median <span>◆</span></th><th scope="col" class="numeric"><abbr title="The sales count Kyara reports for the 30-day window. It is not the 7-day median’s sample size.">30-day sales</abbr></th><th scope="col" class="numeric"><abbr title="Percentage change from the first to last recorded sample in the past 24 hours, for the selected market median.">24h change</abbr></th></tr></thead>
+            <thead><tr><th scope="col">Wiki rank / character <span class="subtle">/ source</span></th><th scope="col">Rarity</th><th scope="col"><abbr title="Waifu or Husbando booster membership across all rarities. Shōnen Mix means listed in both boosters or neither.">Booster</abbr></th><th scope="col" class="numeric" id="median-7-header">7-day median <span>◆</span></th><th scope="col" class="numeric" id="median-30-header">30-day median <span>◆</span></th><th scope="col" class="numeric"><abbr title="The sales count Kyara reports for the 30-day window. It is not the 7-day median’s sample size.">30-day sales</abbr></th><th scope="col" class="numeric"><abbr title="Percentage change from the first to last recorded sample in the past 24 hours, for the selected market median.">24h change</abbr></th></tr></thead>
             <tbody id="card-rows"><tr><td colspan="7" class="empty-state">Your saved snapshot will appear here.</td></tr></tbody>
           </table>
         </div>
         <nav class="pagination" aria-label="Card table pages"><button id="previous-page" class="button button-outline" disabled>← Previous</button><span id="page-label" aria-live="polite">Page 1</span><button id="next-page" class="button button-outline" disabled>Next →</button></nav>
         <p id="changes-note" class="table-footnote" role="status">Loading 24h changes…</p>
-        <p class="table-footnote">— means unavailable. Open a character’s name for its Kyara page. CSV exports all matching cards across pages. Booster labels cover every rarity. Both means the card is listed in both boosters or neither.</p>
+        <p class="table-footnote">— means unavailable. Open a character’s name for its Kyara page. CSV exports all matching cards across pages. Booster labels cover every rarity. Shōnen Mix means the card is listed in both boosters or neither.</p>
       </section>
 
       <details class="method">
