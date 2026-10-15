@@ -14,3 +14,5 @@ h1,h2,.big-number{font-weight:800}.brand-mark{border-radius:50%;color:var(--gree
 
 /* Alternate column tones for easier scanning. */
 .table-wrap tbody td:nth-child(odd){background:#17141e}.table-wrap tbody td:nth-child(even){background:#14121a}.table-wrap tbody tr:hover td:nth-child(odd){background:#211c2a}.table-wrap tbody tr:hover td:nth-child(even){background:#1e1926}
+
+.table-wrap th:not(:first-child),.table-wrap td:not(:first-child){text-align:center}
