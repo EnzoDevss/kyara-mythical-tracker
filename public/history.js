@@ -173,7 +173,7 @@ function renderFreshness() {
   $('history-coverage').textContent = points.length ? `${points.length === 1 ? 'First observation saved. The next successful update adds another point.' : `Showing observations from ${date.format(new Date(points[0].at))} to ${date.format(new Date(points.at(-1).at))}.`} Every successful collection adds a point, even if the price stays the same. Only recorded data is shown.` : 'History fills in over time. A full 7-day or 30-day view needs that much time collecting data.';
 }
 
-async function loadHistory() {
+async function loadHistory(force = false) {
   if (!state.cardId) return;
   const ticket = ++state.request, key = `${state.cardId}:${state.range}`;
   state.controller?.abort(); const controller = new AbortController(); state.controller = controller;
@@ -183,8 +183,15 @@ async function loadHistory() {
   $('history-status').textContent = 'Checking history'; $('history-status').className = 'status-pill pending';
   notice(''); if (!state.data) showEmpty('Loading price history', 'Retrieving the observations saved by the collector.');
   try {
-    const snapshot = await jsonFetch('/api/prices', controller.signal);
-    if (ticket !== state.request) return;
+    if (force || !state.snapshot || Date.now() - state.catalogCheckedAt >= 5 * 60000) {
+      const next = await jsonFetch('/api/prices', controller.signal);
+      if (ticket !== state.request) return;
+      if (next?.schemaVersion !== 1 || !Array.isArray(next.cards) || !Array.isArray(next.pools)) throw new Error('Invalid catalog');
+      state.snapshot = next; state.catalogCheckedAt = Date.now();
+      state.cards = next.cards.filter(card => Number.isSafeInteger(card.id) && card.id > 0 && typeof card.name === 'string').sort((a,b) => a.name.localeCompare(b.name));
+      state.pools = next.pools;
+    }
+    const snapshot = state.snapshot;
     const cutoff = snapshot.selection === 'wiki-top' ? `&asOf=${encodeURIComponent(snapshot.collectedAt)}` : '';
     const data = validateHistory(await jsonFetch(`/api/history?card=${encodeURIComponent(state.cardId)}&range=${state.range}${cutoff}`, controller.signal), state.cardId, state.range);
     if (ticket !== state.request) return;
@@ -223,7 +230,7 @@ async function start() {
       event.preventDefault(); chooseCard(cardMatches[Math.max(0, activeCard)]);
     }
   });
-  $('history-refresh').addEventListener('click', () => state.cards.length ? loadHistory() : location.reload());
+  $('history-refresh').addEventListener('click', () => state.cards.length ? loadHistory(true) : location.reload());
   $('observation-details').addEventListener('toggle', renderTable);
   $('history-chart').addEventListener('pointermove', event => {
     const dots = state.model?.dots; if (!dots?.length) return;
@@ -241,6 +248,7 @@ async function start() {
   try {
     const snapshot = await jsonFetch('/api/prices', controller.signal);
     if (snapshot?.schemaVersion !== 1 || !Array.isArray(snapshot.cards) || !Array.isArray(snapshot.pools)) throw new Error('Invalid catalog');
+    state.snapshot = snapshot; state.catalogCheckedAt = Date.now();
     state.cards = snapshot.cards.filter(card => Number.isSafeInteger(card.id) && card.id > 0 && typeof card.name === 'string').sort((a, b) => a.name.localeCompare(b.name));
     state.pools = snapshot.pools;
     if (!state.cards.length) throw new Error('No cards');
