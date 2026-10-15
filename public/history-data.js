@@ -41,7 +41,7 @@ function smoothPath(points) {
   });
   let path = `M${points[0].x.toFixed(2)},${points[0].y.toFixed(2)}`;
   for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1], b = points[i], dx = (b.x - a.x) / 3;
+    const a = points[i - 1], b = points[i], dx = (b.x - a.x) * 0.45;
     path += ` C${(a.x + dx).toFixed(2)},${(a.y + tangents[i - 1] * dx).toFixed(2)} ${(b.x - dx).toFixed(2)},${(b.y - tangents[i] * dx).toFixed(2)} ${b.x.toFixed(2)},${b.y.toFixed(2)}`;
   }
   return path;
