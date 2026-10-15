@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "kyara-mythical-tracker",
+	"name": "market",
 	"main": "src/worker.mjs",
 	"compatibility_date": "2026-10-14",
 	"workers_dev": true,

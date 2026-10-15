@@ -60,7 +60,7 @@ npm run deploy
 
 The first command is only for initial setup: running it later would overwrite fresh prices with the old seed. The second command publishes your website. If prompted, choose your account and create a free `workers.dev` subdomain.
 
-Wrangler prints a URL like `https://kyara-mythical-tracker.YOUR-SUBDOMAIN.workers.dev`. Open your actual URL. The page initially labels its data as the historical preview. If a Worker with this name already exists in your account and is unrelated, change `name` in `wrangler.jsonc` to a distinct name before deploying.
+Wrangler prints a URL like `https://market.YOUR-SUBDOMAIN.workers.dev`. Open your actual URL. The page initially labels its data as the historical preview. If a Worker with this name already exists in your account and is unrelated, change `name` in `wrangler.jsonc` to a distinct name before deploying.
 
 You can also open your site's `/api/prices` path to see the JSON being served. KV changes may take a short time to propagate. A deployment does not start the collector; connect GitHub next. [Workers deployment](https://developers.cloudflare.com/workers/get-started/guide/), [free workers.dev routing](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)
 
