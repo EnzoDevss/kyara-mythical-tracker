@@ -26,6 +26,10 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import http.client
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -41,6 +45,35 @@ MAX_SAFE_INTEGER = 2**53 - 1
 HISTORY_BUCKETS = 8
 HISTORY_SECONDS = 30 * 24 * 60 * 60
 USER_AGENT = "KyaraMythicalPriceTracker/1.0 (read-only public price comparison)"
+
+
+class PersistentOpener:
+    """One reusable HTTPS connection per host per worker; never follows redirects."""
+    def __init__(self):
+        self.local = threading.local()
+
+    def open(self, request, timeout=30):
+        url = urlsplit(request.full_url)
+        require(url.scheme == "https", "Only HTTPS API requests are supported.")
+        if not hasattr(self.local, "connections"):
+            self.local.connections = {}
+        connections = self.local.connections
+        connection = connections.setdefault(url.netloc, http.client.HTTPSConnection(url.netloc, timeout=timeout))
+        try:
+            connection.request(request.get_method(), url.path + ("?" + url.query if url.query else ""),
+                               body=request.data, headers=dict(request.header_items()))
+            response = connection.getresponse()
+            if not 200 <= response.status < 300:
+                headers, status = response.headers, response.status
+                response.read()
+                raise urllib.error.HTTPError(request.full_url, status, "API error", headers, None)
+            return response
+        except urllib.error.HTTPError:
+            raise
+        except (OSError, http.client.HTTPException):
+            connection.close()
+            connections.pop(url.netloc, None)
+            raise urllib.error.URLError("Connection interrupted") from None
 
 
 class UpdateError(Exception):
@@ -170,7 +203,8 @@ def validate_snapshot(snapshot: Any) -> None:
         require(card_id not in card_ids, f"Snapshot contains duplicate card ID {card_id}.")
         card_ids.add(card_id)
         nonempty_string(card.get("name"), f"Snapshot name for {card_id}")
-        require(card.get("rarity") == "M", f"Snapshot card {card_id} is not Mythical.")
+        require(card.get("rarity") in (("M", "L", "E", "R", "U", "C") if snapshot.get("selection") == "wiki-top" else ("M",)),
+                f"Snapshot card {card_id} has an invalid rarity.")
         require(isinstance(card.get("series"), str), f"Snapshot series for {card_id} must be a string.")
         require(card.get("sourceUrl") == f"{KYARA_BASE}/wiki/{card_id}",
                 f"Snapshot source URL for {card_id} is invalid.")
@@ -195,7 +229,17 @@ def validate_snapshot(snapshot: Any) -> None:
             require(card_id in card_ids, f"Snapshot pool {pool_id} references a missing card.")
             seen.add(card_id)
         referenced.update(seen)
-    require(referenced == card_ids, "Snapshot contains cards outside the selected pools.")
+    if snapshot.get("selection") == "wiki-top":
+        ranked = [card for card in cards if card.get("inTop")]
+        require(type(snapshot.get("topCount")) is int and 1 <= snapshot["topCount"] <= 1000
+                and len(ranked) == snapshot["topCount"], "Top-card coverage is incomplete.")
+        require(sorted(card.get("rank") for card in ranked) == list(range(1, snapshot["topCount"] + 1)),
+                "Wiki ranks are missing or duplicated.")
+        by_id = {card["id"]: card for card in cards}
+        require(all(by_id[i]["rarity"] == "M" for i in referenced), "Comparison pools must contain Mythicals only.")
+        require(all(c.get("inTop") or c["id"] in referenced for c in cards), "Unexpected unranked card.")
+    else:
+        require(referenced == card_ids, "Snapshot contains cards outside the selected pools.")
 
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -208,19 +252,26 @@ class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
 class JsonClient:
     def __init__(self, *, opener: Any = None, sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic,
-                 wall_clock: Callable[[], float] = time.time) -> None:
-        self.opener = opener if opener is not None else urllib.request.build_opener(NoRedirectHandler())
+                 wall_clock: Callable[[], float] = time.time, interval: float = REQUEST_INTERVAL_SECONDS,
+                 persistent: bool = False) -> None:
+        self.opener = opener if opener is not None else PersistentOpener() if persistent else urllib.request.build_opener(NoRedirectHandler())
         self.sleep = sleep
         self.clock = clock
         self.wall_clock = wall_clock
         self.last_request_at: float | None = None
+        self.interval = interval
+        self.lock = threading.Lock()
+        self.cooldown_until = 0.0
+        self.deadline = float("inf")
 
     def _pace(self) -> None:
-        if self.last_request_at is not None:
-            wait = REQUEST_INTERVAL_SECONDS - (self.clock() - self.last_request_at)
+        with self.lock:
+            require(self.clock() < self.deadline, "Collection deadline reached; previous snapshot retained.")
+            target = max(self.cooldown_until, (self.last_request_at + self.interval) if self.last_request_at is not None else 0)
+            wait = target - self.clock()
             if wait > 0:
                 self.sleep(wait)
-        self.last_request_at = self.clock()
+            self.last_request_at = self.clock()
 
     def _retry_wait(self, retry_after: str | None, attempt: int) -> float:
         wait = 10.0 * 2**attempt
@@ -263,7 +314,12 @@ class JsonClient:
                 retryable = status == 429 or 500 <= status <= 599
                 if not retryable or attempt + 1 == attempts:
                     raise UpdateError(f"{label} request failed (HTTP {status}); snapshot was not replaced.") from None
-                self.sleep(self._retry_wait(retry_after, attempt))
+                wait = self._retry_wait(retry_after, attempt)
+                if status == 429:
+                    with self.lock:
+                        self.cooldown_until = max(self.cooldown_until, self.clock() + wait)
+                        self.interval = max(self.interval, 1.0)
+                self.sleep(wait)
             except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
                 if attempt + 1 == attempts:
                     raise UpdateError(f"{label} network request failed; snapshot was not replaced.") from None
@@ -274,23 +330,67 @@ class JsonClient:
         return self.request_json(KYARA_BASE + path)
 
 
-def collect_snapshot(client: JsonClient, now: Callable[[], str] = utc_now) -> dict[str, Any]:
+def collect_snapshot(client: JsonClient, now: Callable[[], str] = utc_now, *, top_count: int | None = None,
+                     previous: dict[str, Any] | None = None) -> dict[str, Any]:
     started = now()
     catalog = parse_catalog(client.get_kyara("/api/characters"))
     pools = [parse_pool(client.get_kyara(f"/api/packs/{pool_id}/characters"), pool_id, catalog)
              for pool_id in POOL_NAMES]
     catalog_updated = now()
     ids = sorted({card_id for pool in pools for card_id in pool["cardIds"]})
-    cards = []
-    for card_id in ids:
-        price = parse_price(client.get_kyara(f"/api/market/prices/{card_id}"), card_id)
+    ranked_ids = set()
+    if top_count is not None:
+        require(type(top_count) is int and 1 <= top_count <= 1000 and len(catalog) >= top_count, "Invalid top-card count.")
+        ranked = sorted(catalog.values(), key=lambda c: c.get("rank", MAX_SAFE_INTEGER))[:top_count]
+        require([c.get("rank") for c in ranked] == list(range(top_count)), "Catalog wiki ranks are invalid.")
+        ranked_ids = {c["id"] for c in ranked}
+        ids = sorted(set(ids) | ranked_ids)
+    previous_cards = {c["id"]: c for c in (previous or {}).get("cards", [])}
+    stopped = threading.Event()
+    failures = []
+    def collect_card(card_id):
+        require(not stopped.is_set(), "Collection stopped after API failures.")
         entry = catalog[card_id]
-        cards.append({"id": card_id, "name": entry["name"], "rarity": "M",
-                      "series": entry["series"] or "", **price,
-                      "sourceUrl": f"{KYARA_BASE}/wiki/{card_id}"})
+        try:
+            payload = client.get_kyara(f"/api/market/prices/{card_id}")
+        except UpdateError as exc:
+            # Isolated transport failures may carry forward a visibly stale value.
+            if top_count is None or "denied access" in str(exc) or "deadline" in str(exc):
+                stopped.set()
+                raise
+            failures.append(card_id)
+            if len(failures) > max(1, len(ids) // 100):
+                stopped.set()
+                raise UpdateError("Too many price requests failed; previous snapshot retained.") from None
+            old = previous_cards.get(card_id, {})
+            price = {key: old.get(key) for key in PRICE_FIELDS}
+            observed = old.get("priceCollectedAt", (previous or {}).get("collectedAt"))
+            stale = True
+        else:
+            # Schema failures are fatal, not disguised as missing prices.
+            price = parse_price(payload, card_id)
+            observed, stale = now(), False
+        card = {"id": card_id, "name": nonempty_string(entry.get("name"), "Catalog name"),
+                "rarity": entry["rarity"], "series": entry.get("series") or "", **price,
+                "sourceUrl": f"{KYARA_BASE}/wiki/{card_id}"}
+        if top_count is not None:
+            card.update(rank=entry["rank"] + 1, inTop=card_id in ranked_ids,
+                        priceCollectedAt=observed, stale=stale)
+        return card
+    cards = []
+    if top_count is not None and hasattr(client, "lock"):
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            for index, card in enumerate(executor.map(collect_card, ids), 1):
+                cards.append(card)
+                if index % 100 == 0:
+                    print(f"Collected {index}/{len(ids)} cards.", flush=True)
+    else:
+        cards = [collect_card(card_id) for card_id in ids]
     snapshot = {"schemaVersion": 1, "source": "kyara-public-api", "collectionStartedAt": started,
                 "catalogUpdatedAt": catalog_updated, "collectedAt": now(), "currency": "chakra",
                 "pools": pools, "cards": cards}
+    if top_count is not None:
+        snapshot.update(selection="wiki-top", topCount=top_count, failedCards=len(failures))
     validate_snapshot(snapshot)
     return snapshot
 
@@ -353,6 +453,63 @@ def validate_history(history: Any, bucket: int) -> None:
                 number_or_null(value, "History price")
 
 
+def encode_runs(values):
+    return [[i, value] for i, value in enumerate(values) if i == 0 or value != values[i - 1]]
+
+
+def expand_history(history, bucket):
+    """Read legacy dense history and the compact format without inventing samples."""
+    if history is None or history.get("schemaVersion") == 1:
+        return history
+    require(history.get("schemaVersion") == 2 and isinstance(history.get("cards"), dict)
+            and isinstance(history.get("timestamps"), list), "Unsupported compact history.")
+    result = {**history, "schemaVersion": 1, "cards": {}}
+    length = len(history["timestamps"])
+    for key, raw in history["cards"].items():
+        require(isinstance(raw, str), "Compact history card must be encoded text.")
+        card = decode_json(raw.encode("utf-8"))
+        for field in ("median7d", "median30d"):
+            runs = card.get(field)
+            require(isinstance(runs, list) and runs and isinstance(runs[0], list)
+                    and runs[0][0] == 0, "Invalid history runs.")
+            values = []
+            for i, pair in enumerate(runs):
+                require(isinstance(pair, list) and len(pair) == 2 and type(pair[0]) is int
+                        and 0 <= pair[0] < length and pair[0] == len(values), "Invalid history run index.")
+                number_or_null(pair[1], "History run price")
+                end = runs[i + 1][0] if i + 1 < len(runs) else length
+                require(type(end) is int and pair[0] < end <= length, "Invalid history run end.")
+                values.extend([pair[1]] * (end - pair[0]))
+            card[field] = values
+        result["cards"][key] = card
+    validate_history(result, bucket)
+    return result
+
+
+def compact_history(history):
+    cards = {}
+    for key, before in history["cards"].items():
+        card = {**before, **{field: encode_runs(before[field]) for field in ("median7d", "median30d")}}
+        cards[key] = json.dumps(card, ensure_ascii=False, separators=(",", ":"))
+    return {**history, "schemaVersion": 2, "cards": cards}
+
+
+def snapshot_changes(history, snapshot):
+    stamp = int(parse_timestamp(snapshot["collectedAt"], "collectedAt").timestamp())
+    for card in snapshot["cards"]:
+        saved = history["cards"].get(str(card["id"]))
+        if not saved:
+            continue
+        indices = [i for i, t in enumerate(history["timestamps"])
+                   if stamp - 86400 <= t <= stamp and saved["firstSeenAt"] <= t <= saved["lastSeenAt"]]
+        card["change24h"] = {}
+        for field in ("median7d", "median30d"):
+            first = saved[field][indices[0]] if indices else None
+            last = saved[field][indices[-1]] if indices else None
+            card["change24h"][field] = ((last - first) / first * 100
+                if not card.get("stale") and len(indices) >= 2 and first is not None and first > 0 and last is not None else None)
+
+
 def append_history(previous: Any, snapshot: dict[str, Any], bucket: int) -> dict[str, Any]:
     """One shared timeline per bucket keeps 30 days compact, without losing any samples."""
     stamp = int(parse_timestamp(snapshot["collectedAt"], "collectedAt").timestamp())
@@ -364,7 +521,7 @@ def append_history(previous: Any, snapshot: dict[str, Any], bucket: int) -> dict
     # Replaying the same collection replaces that timestamp instead of duplicating it.
     indices = [i for i, t in enumerate(old["timestamps"]) if cutoff <= t < stamp]
     times = [old["timestamps"][i] for i in indices] + [stamp]
-    current = {str(c["id"]): c for c in snapshot["cards"] if c["id"] % HISTORY_BUCKETS == bucket}
+    current = {str(c["id"]): c for c in snapshot["cards"] if c["id"] % HISTORY_BUCKETS == bucket and not c.get("stale")}
     cards = {}
     for key in sorted(set(old["cards"]) | set(current), key=int):
         before, card = old["cards"].get(key), current.get(key)
@@ -392,7 +549,11 @@ def upload_history(client: JsonClient, snapshot: dict[str, Any], credentials: di
         previous = client.request_json(kv_url(credentials, key),
                                        headers={"Authorization": "Bearer " + credentials["CLOUDFLARE_API_TOKEN"]},
                                        label="Cloudflare history", allow_missing=True)
+        previous = expand_history(previous, bucket)
         history = append_history(previous, snapshot, bucket)
+        if snapshot.get("selection") == "wiki-top":
+            snapshot_changes(history, snapshot)
+            history = compact_history(history)
         encoded = (json.dumps(history, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n").encode("utf-8")
         require(len(encoded) <= MAX_RESPONSE_BYTES, "History exceeds the supported size; refusing to truncate it.")
         pending.append((key, encoded))
@@ -417,14 +578,23 @@ def atomic_write(path: Path, data: bytes) -> None:
 
 
 def run_update(output: Path, *, upload: bool = False, environ: Any = None,
-               client: JsonClient | None = None) -> dict[str, Any]:
+               client: JsonClient | None = None, top_count: int | None = None) -> dict[str, Any]:
     # Fail configuration before contacting Kyara or modifying any file.
     credentials = upload_credentials(os.environ if environ is None else environ) if upload else None
-    client = client if client is not None else JsonClient()
-    snapshot = collect_snapshot(client)
-    encoded = (json.dumps(snapshot, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n").encode("utf-8")
+    client = client if client is not None else JsonClient(interval=0.5 if top_count else 1.0, persistent=bool(top_count))
+    previous = None
+    if credentials is not None and top_count:
+        previous = client.request_json(kv_url(credentials, "latest"),
+            headers={"Authorization": "Bearer " + credentials["CLOUDFLARE_API_TOKEN"]}, label="Cloudflare snapshot", allow_missing=True)
+        if previous is not None:
+            validate_snapshot(previous)
+    if hasattr(client, "deadline"):
+        client.deadline = client.clock() + 23 * 60
+    snapshot = collect_snapshot(client, top_count=top_count, previous=previous)
     if credentials is not None:
         upload_history(client, snapshot, credentials)
+    encoded = (json.dumps(snapshot, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n").encode("utf-8")
+    if credentials is not None:
         upload_snapshot(client, encoded, credentials)
     atomic_write(Path(output), encoded)
     return snapshot
@@ -434,6 +604,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", type=Path, default=Path("data/latest.json"), help="Atomic local output (default: data/latest.json).")
     parser.add_argument("--upload", action="store_true", help="Append 30-day history and publish the complete snapshot to Cloudflare KV.")
+    parser.add_argument("--top", type=int, default=None, help="Track the top N wiki-ranked cards (maximum 1000), plus comparison Mythicals.")
     parser.add_argument("--validate-only", type=Path, metavar="PATH", help="Validate an existing snapshot without network access or writes.")
     args = parser.parse_args(argv)
     if args.validate_only is not None and args.upload:
@@ -443,9 +614,9 @@ def main(argv: list[str] | None = None) -> int:
             validate_snapshot(decode_json(args.validate_only.read_bytes()))
             print("Snapshot validation passed.")
         else:
-            snapshot = run_update(args.output, upload=args.upload)
+            snapshot = run_update(args.output, upload=args.upload, top_count=args.top)
             counts = ", ".join(f"{pool['name']}: {len(pool['cardIds'])}" for pool in snapshot["pools"])
-            print(f"Saved {len(snapshot['cards'])} Mythical prices ({counts}) at {snapshot['collectedAt']}.")
+            print(f"Saved {len(snapshot['cards'])} card prices ({counts}) at {snapshot['collectedAt']}.")
             if args.upload:
                 print("Cloudflare KV accepted the history and complete snapshot (9 writes, including latest).")
         return 0

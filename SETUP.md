@@ -171,7 +171,7 @@ npm run dev
 Open the local URL printed by Wrangler. To test collection without uploading, run:
 
 ```powershell
-python scripts/update_prices.py --output data/latest.json
+python scripts/update_prices.py --top 1000 --output data/latest.json
 ```
 
 This makes live read requests to Kyara but does not change Cloudflare. It does not refresh the deployed website until the resulting snapshot is uploaded through the configured workflow or a deliberate KV upload.

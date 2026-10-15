@@ -4,26 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0d0c11">
-  <meta name="description" content="Compare Waifus and Husbandos Mythical card prices with a transparent, automatically refreshed Kyara market dashboard.">
-  <title>Kyara Mythical Market</title>
-  <link rel="stylesheet" href="/styles.css?v=kyara-dark-3">
-  <link rel="stylesheet" href="/history.css?v=orange-1">
-  <script type="module" src="/app.js?v=changes-1"></script>
+  <meta name="description" content="Track prices and history for the top 1,000 Kyara wiki cards, with rarity filters and Mythical booster comparisons.">
+  <title>Kyara Market Tracker</title>
+  <link rel="stylesheet" href="/styles.css?v=top1000-1">
+  <link rel="stylesheet" href="/history.css?v=top1000-1">
+  <script type="module" src="/app.js?v=top1000-1"></script>
 </head>
 <body>
   <a class="skip-link" href="#card-list">Skip to card prices</a>
   <div class="shell">
     <header class="masthead">
-      <a class="brand" href="/" aria-label="Kyara Mythical Market home"><span class="brand-mark" aria-hidden="true">◆</span><span>KYARA<span class="brand-sub">MYTHICAL MARKET</span></span></a>
-      <nav class="page-nav" aria-label="Main navigation"><a href="/" aria-current="page">Comparison</a><a href="/history">Price history</a></nav>
+      <a class="brand" href="/" aria-label="Kyara Market Tracker home"><span class="brand-mark" aria-hidden="true">◆</span><span>KYARA<span class="brand-sub">MARKET TRACKER</span></span></a>
+      <nav class="page-nav" aria-label="Main navigation"><a href="/" aria-current="page">Market</a><a href="/history">Price history</a></nav>
     </header>
 
     <main>
       <section class="hero" aria-labelledby="page-title">
         <div>
-          <p class="eyebrow">WAIFUS / HUSBANDOS</p>
-          <h1 id="page-title">Your next pull,<br><span>by the numbers.</span></h1>
-          <p class="hero-copy">Every Mythical. Both boosters. One clear comparison of their historical market prices.</p>
+          <p class="eyebrow">THE WIKI TOP 1,000</p>
+          <h1 id="page-title">Your favorite cards,<br><span>by the numbers.</span></h1>
+          <p class="hero-copy">Track the top 1,000 wiki cards across rarities. Follow market medians, price changes, and 30 days of history.</p>
         </div>
         <div class="hero-note"><span class="large-diamond" aria-hidden="true">◆</span><p>All values in <strong>chakra</strong><br><span>Kyara’s in-game currency</span></p></div>
       </section>
@@ -49,22 +49,24 @@
       </section>
 
       <section class="list-section" id="card-list" aria-labelledby="list-title">
-        <div class="section-heading"><div><p class="eyebrow">EXPLORE THE POOLS</p><h2 id="list-title">Every Mythical, accounted for.</h2></div><button type="button" id="download" class="button button-outline" disabled>Export CSV <span aria-hidden="true">↓</span></button></div>
+        <div class="section-heading"><div><p class="eyebrow">EXPLORE THE MARKET</p><h2 id="list-title">The wiki top 1,000.</h2></div><button type="button" id="download" class="button button-outline" disabled>Export CSV <span aria-hidden="true">↓</span></button></div>
         <div class="filters">
           <label class="search-label"><span class="sr-only">Search characters or series</span><span class="search-icon" aria-hidden="true">⌕</span><input id="search" type="search" autocomplete="off" placeholder="Search a character or series…"></label>
-          <label><span class="sr-only">Filter booster</span><select id="pool"><option value="">Both boosters</option><option value="waifu">Waifus</option><option value="husbando">Husbandos</option></select></label>
-          <label><span class="sr-only">Sort cards</span><select id="sort"><option value="price-desc">Selected median: high to low</option><option value="price-asc">Selected median: low to high</option><option value="change-desc">24h change: high to low</option><option value="change-asc">24h change: low to high</option><option value="name">Character: A to Z</option><option value="sales">30-day sales: high to low</option></select></label>
+          <label><span class="sr-only">Filter rarity</span><select id="rarity"><option value="">All rarities</option><option value="M">Mythical</option><option value="L">Legendary</option><option value="E">Epic</option><option value="R">Rare</option><option value="U">Uncommon</option><option value="C">Common</option></select></label>
+          <label><span class="sr-only">Filter booster</span><select id="pool"><option value="">All cards</option><option value="waifu">Waifus</option><option value="husbando">Husbandos</option></select></label>
+          <label><span class="sr-only">Sort cards</span><select id="sort"><option value="rank">Wiki rank: 1 to 1,000</option><option value="price-desc">Selected median: high to low</option><option value="price-asc">Selected median: low to high</option><option value="change-desc">24h change: high to low</option><option value="change-asc">24h change: low to high</option><option value="name">Character: A to Z</option><option value="sales">30-day sales: high to low</option></select></label>
         </div>
         <p id="result-count" class="result-count" aria-live="polite">Loading card list…</p>
-        <div class="table-wrap" tabindex="0" role="region" aria-label="Mythical card prices; scroll horizontally on small screens">
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Card prices; scroll horizontally on small screens">
           <table>
             <caption class="sr-only">Card prices in chakra, with Kyara source links and reported sales counts.</caption>
-            <thead><tr><th scope="col">Character <span class="subtle">/ source</span></th><th scope="col">Booster</th><th scope="col" class="numeric" id="median-7-header">7-day median <span>◆</span></th><th scope="col" class="numeric" id="median-30-header">30-day median <span>◆</span></th><th scope="col" class="numeric"><abbr title="The sales count Kyara reports for the 30-day window. It is not the 7-day median’s sample size.">30-day sales</abbr></th><th scope="col" class="numeric"><abbr title="Percentage change from the first to last recorded sample in the past 24 hours, for the selected market median.">24h change</abbr></th></tr></thead>
-            <tbody id="card-rows"><tr><td colspan="6" class="empty-state">Your saved snapshot will appear here.</td></tr></tbody>
+            <thead><tr><th scope="col">Wiki rank / character <span class="subtle">/ source</span></th><th scope="col">Rarity</th><th scope="col"><abbr title="Mythical membership in the Waifu or Husbando booster comparison. Other rarities are not assigned here.">Mythical pool</abbr></th><th scope="col" class="numeric" id="median-7-header">7-day median <span>◆</span></th><th scope="col" class="numeric" id="median-30-header">30-day median <span>◆</span></th><th scope="col" class="numeric"><abbr title="The sales count Kyara reports for the 30-day window. It is not the 7-day median’s sample size.">30-day sales</abbr></th><th scope="col" class="numeric"><abbr title="Percentage change from the first to last recorded sample in the past 24 hours, for the selected market median.">24h change</abbr></th></tr></thead>
+            <tbody id="card-rows"><tr><td colspan="7" class="empty-state">Your saved snapshot will appear here.</td></tr></tbody>
           </table>
         </div>
+        <nav class="pagination" aria-label="Card table pages"><button id="previous-page" class="button button-outline" disabled>← Previous</button><span id="page-label" aria-live="polite">Page 1</span><button id="next-page" class="button button-outline" disabled>Next →</button></nav>
         <p id="changes-note" class="table-footnote" role="status">Loading 24h changes…</p>
-        <p class="table-footnote">— means unavailable. Open a character’s name for its Kyara page. CSV exports the rows currently shown.</p>
+        <p class="table-footnote">— means unavailable. Open a character’s name for its Kyara page. CSV exports all matching cards across pages. Mythical pool labels apply only to the booster comparison.</p>
       </section>
 
       <details class="method">
@@ -77,7 +79,7 @@
       </details>
     </main>
 
-    <footer><p>An independent community tracker. Not affiliated with Kyara.</p><p>MYTHICAL MARKET <span aria-hidden="true">◆</span></p></footer>
+    <footer><p>An independent community tracker. Not affiliated with Kyara.</p><p>MARKET TRACKER <span aria-hidden="true">◆</span></p></footer>
   </div>
 </body>
 </html>

@@ -1,3 +1,4 @@
+export const RARITY_NAMES = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
 const POOL_IDS = ['waifu', 'husbando'];
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const STALE_AFTER_MS = 90 * 60 * 1000;
@@ -52,7 +53,7 @@ export function computePoolStats(snapshot, poolId, period = 7) {
   const key = Number(period) === 30 ? 'median30d' : 'median7d';
   const byId = new Map(snapshot.cards.map(card => [String(card.id), card]));
   const eligible = [...new Set(pool.cardIds.map(String))].map(id => byId.get(id));
-  const pricedCards = eligible.filter(card => card?.rarity === 'M' && isPrice(card[key]));
+  const pricedCards = eligible.filter(card => card?.rarity === 'M' && !card.stale && isPrice(card[key]));
   const values = pricedCards.map(card => card[key]);
   const sum = values.reduce((total, value) => total + value, 0);
   const highest = pricedCards.reduce((best, card) => !best || card[key] > best[key] ? card : best, null);
@@ -93,8 +94,8 @@ if (typeof document !== 'undefined') startDashboard();
 
 function startDashboard() {
   const $ = id => document.getElementById(id);
-  const state = { snapshot: null, period: 7, origin: '', refreshing: false, lastCheckedAt: null, error: '', changes: {}, changesRequest: 0 };
-  const cardChange = card => state.changes[String(card.id)]?.[state.period === 30 ? 'median30d' : 'median7d'];
+  const state = { snapshot: null, period: 7, origin: '', refreshing: false, lastCheckedAt: null, error: '', changes: {}, changesRequest: 0, page: 1, pageSize: 50 };
+  const cardChange = card => card.stale ? null : (card.change24h || state.changes[String(card.id)])?.[state.period === 30 ? 'median30d' : 'median7d'];
   const numbers = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
   const means = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dates = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -188,11 +189,12 @@ function startDashboard() {
     const search = $('search').value.trim().toLocaleLowerCase();
     const poolFilter = $('pool').value;
     const key = state.period === 30 ? 'median30d' : 'median7d';
-    const rows = [...memberships].map(([id, pools]) => ({ card: byId.get(id) || { id, name: `Card #${id}`, median7d: null, median30d: null }, pools }));
-    const filtered = rows.filter(({ card, pools }) => (!poolFilter || pools.includes(poolFilter)) && (!search || `${card.name} ${typeof card.series === 'string' ? card.series : ''}`.toLocaleLowerCase().includes(search)));
+    const rows = state.snapshot.cards.filter(card => state.snapshot.selection !== 'wiki-top' || card.inTop).map(card => ({ card, pools: memberships.get(String(card.id)) || [] }));
+    const filtered = rows.filter(({ card, pools }) => (!poolFilter || pools.includes(poolFilter)) && (!$('rarity').value || card.rarity === $('rarity').value) && (!search || `${card.name} ${typeof card.series === 'string' ? card.series : ''}`.toLocaleLowerCase().includes(search)));
     const sort = $('sort').value;
     const nameCompare = (a, b) => a.card.name.localeCompare(b.card.name);
     filtered.sort((a, b) => {
+      if (sort === 'rank') return (a.card.rank ?? Infinity) - (b.card.rank ?? Infinity) || nameCompare(a,b);
       if (sort === 'name') return nameCompare(a, b);
       if (sort.startsWith('change-')) return compareChanges(cardChange(a.card), cardChange(b.card), sort === 'change-asc') || nameCompare(a, b);
       const field = sort === 'sales' ? 'sales30d' : key;
@@ -210,7 +212,10 @@ function startDashboard() {
     if (!state.snapshot) return;
     const rows = getRows();
     const fragment = document.createDocumentFragment();
-    for (const { card, pools } of rows) {
+    const pages = Math.max(1, Math.ceil(rows.length / state.pageSize));
+    state.page = Math.max(1, Math.min(state.page, pages));
+    const start = (state.page - 1) * state.pageSize;
+    for (const { card, pools } of rows.slice(start, start + state.pageSize)) {
       const tr = node('tr', '');
       const character = node('td', '');
       const link = node('a', '', card.name);
@@ -218,14 +223,19 @@ function startDashboard() {
       link.href = `https://kyara.games/wiki/${encodeURIComponent(String(card.id))}`;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
+      if (card.rank) character.append(node('span', 'wiki-rank', '#' + String(card.rank).padStart(4, '0')));
       character.append(link);
+      if (card.stale) { const stale = node('span', 'card-stale', 'Stale price'); stale.title = card.priceCollectedAt ? `Last collected ${dates.format(new Date(card.priceCollectedAt))}` : 'No successful collection yet'; character.append(stale); }
       if (typeof card.series === 'string' && card.series) character.append(node('span', 'series', card.series));
       const history = node('a', 'history-link', 'Price history');
       history.href = `/history?card=${encodeURIComponent(String(card.id))}&range=24h&metric=median${state.period}d`;
       character.append(history);
       const booster = node('td', '');
       for (const pool of pools) booster.append(node('span', `pool-label ${pool}`, pool === 'waifu' ? 'Waifus' : 'Husbandos'));
-      tr.append(character, booster);
+      const rarity = node('td', '');
+      rarity.append(node('span', `rarity-label rarity-${card.rarity}`, RARITY_NAMES[card.rarity] || card.rarity));
+      if (!pools.length) booster.append(node('span', 'muted', '—'));
+      tr.append(character, rarity, booster);
       for (const period of [7, 30]) {
         const value = card[`median${period}d`];
         tr.append(node('td', `numeric${state.period === period ? ' selected-median' : ''}${!isPrice(value) ? ' missing' : ''}`, formatPrice(value)));
@@ -237,16 +247,19 @@ function startDashboard() {
     }
     if (!rows.length) {
       const tr = node('tr', '');
-      const td = node('td', 'empty-state', 'No cards match those filters. Try another character or choose both boosters.');
-      td.colSpan = 6;
+      const td = node('td', 'empty-state', 'No cards match those filters. Try another character or clear the rarity or booster filter.');
+      td.colSpan = 7;
       tr.append(td);
       fragment.append(tr);
     }
     $('card-rows').replaceChildren(fragment);
-    $('result-count').textContent = `${numbers.format(rows.length)} ${rows.length === 1 ? 'card' : 'cards'} shown · selected comparison: ${state.period}-day medians`;
+    $('result-count').textContent = `${numbers.format(rows.length)} matching cards · ${rows.length ? start + 1 : 0}–${Math.min(start + state.pageSize, rows.length)} shown · ${state.period}-day medians`;
     $('median-7-header').classList.toggle('selected-median', state.period === 7);
     $('median-30-header').classList.toggle('selected-median', state.period === 30);
     $('download').disabled = !rows.length;
+    $('page-label').textContent = `Page ${state.page} of ${pages}`;
+    $('previous-page').disabled = state.page === 1;
+    $('next-page').disabled = state.page === pages;
   }
 
   async function fetchSnapshot(path) {
@@ -263,6 +276,11 @@ function startDashboard() {
   }
 
   async function refreshChanges() {
+    if (state.snapshot?.selection === 'wiki-top') {
+      ++state.changesRequest;
+      $('changes-note').textContent = '24h change: first to last recorded sample as of this snapshot, using the selected median. — means insufficient data, a stale price, or a zero starting price.';
+      return;
+    }
     const ticket = ++state.changesRequest;
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 20000);
     state.changes = {};
@@ -337,9 +355,11 @@ function startDashboard() {
   }
 
   $('refresh').addEventListener('click', refreshData);
-  $('search').addEventListener('input', renderTable);
-  $('pool').addEventListener('change', renderTable);
-  $('sort').addEventListener('change', renderTable);
+  const resetTable = () => { state.page = 1; renderTable(); };
+  $('search').addEventListener('input', resetTable);
+  for (const id of ['pool', 'rarity', 'sort']) $(id).addEventListener('change', resetTable);
+  $('previous-page').addEventListener('click', () => { state.page--; renderTable(); });
+  $('next-page').addEventListener('click', () => { state.page++; renderTable(); });
   for (const radio of document.querySelectorAll('input[name="period"]')) {
     radio.addEventListener('change', event => {
       state.period = Number(event.target.value);
@@ -349,14 +369,14 @@ function startDashboard() {
   }
   $('download').addEventListener('click', () => {
     if (!state.snapshot) return;
-    const header = ['Character', 'Series', 'Booster', '7-day median (chakra)', '30-day median (chakra)', '30-day sales', 'Collected at (UTC)', 'Source', `24h change (%) - ${state.period}-day median`];
-    const lines = getRows().map(({ card, pools }) => [card.name, typeof card.series === 'string' ? card.series : '', pools.map(id => id === 'waifu' ? 'Waifus' : 'Husbandos').join(' / '), card.median7d, card.median30d, card.sales30d, state.snapshot.collectedAt, `https://kyara.games/wiki/${card.id}`]);
+    const header = ['Wiki rank', 'Rarity', 'Character', 'Series', 'Mythical booster', '7-day median (chakra)', '30-day median (chakra)', '30-day sales', 'Collected at (UTC)', 'Source', 'Price collected at (UTC)', 'Stale price', `24h change (%) - ${state.period}-day median`];
+    const lines = getRows().map(({ card, pools }) => [card.rank ?? '', RARITY_NAMES[card.rarity] || card.rarity, card.name, typeof card.series === 'string' ? card.series : '', pools.map(id => id === 'waifu' ? 'Waifus' : 'Husbandos').join(' / '), card.median7d, card.median30d, card.sales30d, state.snapshot.collectedAt, `https://kyara.games/wiki/${card.id}`, card.priceCollectedAt || state.snapshot.collectedAt, Boolean(card.stale)]);
     getRows().forEach(({ card }, index) => lines[index].push(cardChange(card)));
     const csv = '\uFEFF' + [header, ...lines].map(row => row.map(csvCell).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = node('a', '');
     link.href = url;
-    link.download = `kyara-mythicals-${state.snapshot.collectedAt.slice(0, 10)}.csv`;
+    link.download = `kyara-market-${state.snapshot.collectedAt.slice(0, 10)}.csv`;
     document.body.append(link);
     link.click();
     link.remove();

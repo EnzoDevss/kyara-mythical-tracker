@@ -1,3 +1,4 @@
+const rarityNames = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
 import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel } from './history-data.js';
 
 const $ = id => document.getElementById(id);
@@ -43,14 +44,15 @@ function highlightCard(index) {
 }
 function renderOptions() {
   const query = $('card-search').value.trim().toLocaleLowerCase();
-  cardMatches = state.cards.filter(card => `${card.name} ${card.series}`.toLocaleLowerCase().includes(query));
+  const matches = state.cards.filter(card => `${card.name} ${card.series}`.toLocaleLowerCase().includes(query));
+  cardMatches = matches.slice(0, 50);
   activeCard = -1;
   $('card-search').removeAttribute('aria-activedescendant');
   const fragment = document.createDocumentFragment();
   for (const card of cardMatches) {
     const option = element('li', undefined, 'card-option');
     option.id = `card-option-${card.id}`; option.setAttribute('role', 'option'); option.setAttribute('aria-selected', 'false');
-    option.append(element('span', card.name, 'card-option-name'), element('span', card.series || 'Mythical', 'card-option-series'));
+    option.append(element('span', card.name, 'card-option-name'), element('span', `${rarityNames[card.rarity] || 'Card'} · ${card.series || ''}`, 'card-option-series'));
     option.addEventListener('pointerdown', event => event.preventDefault());
     option.addEventListener('click', () => chooseCard(card));
     fragment.append(option);
@@ -59,7 +61,7 @@ function renderOptions() {
   $('card-no-results').hidden = cardMatches.length !== 0;
   $('card-suggestions').hidden = false;
   $('card-search').setAttribute('aria-expanded', 'true');
-  $('picker-note').textContent = `${cardMatches.length} matching characters. Choose a result, or use the arrow keys and Enter.`;
+  $('picker-note').textContent = `${matches.length} matching characters${matches.length > 50 ? "; showing the first 50—keep typing to narrow results" : ""}. Use the arrow keys and Enter.`;
 }
 
 function renderCard() {
@@ -68,7 +70,7 @@ function renderCard() {
   $('card-series').textContent = card?.series || '';
   document.title = `${card?.name || 'Card'} price history · Kyara`;
   const memberships = state.pools.filter(pool => pool.cardIds.some(id => String(id) === state.cardId)).map(pool => pool.id === 'waifu' ? 'WAIFUS' : 'HUSBANDOS');
-  $('card-pool').textContent = `${memberships.join(' / ') || 'MYTHICAL'} · PRICE HISTORY`;
+  $('card-pool').textContent = `${[rarityNames[card?.rarity], ...memberships].filter(Boolean).join(' / ') || 'CARD'} · PRICE HISTORY`;
   $('card-source').href = `https://kyara.games/wiki/${state.cardId}`;
   $('card-source').hidden = false;
 }
@@ -181,7 +183,10 @@ async function loadHistory() {
   $('history-status').textContent = 'Checking history'; $('history-status').className = 'status-pill pending';
   notice(''); if (!state.data) showEmpty('Loading price history', 'Retrieving the observations saved by the collector.');
   try {
-    const data = validateHistory(await jsonFetch(`/api/history?card=${encodeURIComponent(state.cardId)}&range=${state.range}`, state.controller.signal), state.cardId, state.range);
+    const snapshot = await jsonFetch('/api/prices', controller.signal);
+    if (ticket !== state.request) return;
+    const cutoff = snapshot.selection === 'wiki-top' ? `&asOf=${encodeURIComponent(snapshot.collectedAt)}` : '';
+    const data = validateHistory(await jsonFetch(`/api/history?card=${encodeURIComponent(state.cardId)}&range=${state.range}${cutoff}`, controller.signal), state.cardId, state.range);
     if (ticket !== state.request) return;
     state.data = data; state.checked = new Date();
     renderCard(); drawChart(); renderFreshness(); renderTable();
@@ -236,14 +241,14 @@ async function start() {
   try {
     const snapshot = await jsonFetch('/api/prices', controller.signal);
     if (snapshot?.schemaVersion !== 1 || !Array.isArray(snapshot.cards) || !Array.isArray(snapshot.pools)) throw new Error('Invalid catalog');
-    state.cards = snapshot.cards.filter(card => Number.isSafeInteger(card.id) && card.id > 0 && card.rarity === 'M' && typeof card.name === 'string').sort((a, b) => a.name.localeCompare(b.name));
+    state.cards = snapshot.cards.filter(card => Number.isSafeInteger(card.id) && card.id > 0 && typeof card.name === 'string').sort((a, b) => a.name.localeCompare(b.name));
     state.pools = snapshot.pools;
     if (!state.cards.length) throw new Error('No cards');
     if (!state.cardId) state.cardId = String(state.cards[0].id);
     if (!/^[1-9][0-9]*$/.test(state.cardId) || !Number.isSafeInteger(Number(state.cardId))) throw new Error('Invalid card');
     $('card-search').disabled = false;
     $('card-search').value = state.cards.find(card => String(card.id) === state.cardId)?.name || '';
-    $('picker-note').textContent = `Search ${state.cards.length} Mythicals by character or series.`;
+    $('picker-note').textContent = `Search ${state.cards.length} cards by character or series.`;
     renderCard(); syncUrl(); await loadHistory();
   } catch {
     notice('Could not load the card list. Refresh this page to try again.');

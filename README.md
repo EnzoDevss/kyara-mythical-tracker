@@ -1,6 +1,6 @@
-# Kyara Mythical Tracker
+# Kyara Market Tracker
 
-A dashboard comparing the Mythical cards in Kyara's Waifus and Husbandos boosters. It shows each card's 7-day and 30-day market medians, sales counts, booster averages, and a recommendation based on the selected period. The price history page charts each card over 24 hours, 7 days, or 30 days.
+A dashboard tracking the top 1,000 cards by Kyara wiki rank across rarities, alongside the original Waifu/Husbando Mythical comparison. It shows each card's 7-day and 30-day market medians, sales counts, booster averages, and a recommendation based on the selected period. The price history page charts each card over 24 hours, 7 days, or 30 days.
 
 **Start with [SETUP.md](SETUP.md)** to deploy a new copy to your own Cloudflare account and connect the free updater. Existing installations use the same KV namespace, secrets, and schedule for history.
 
@@ -18,7 +18,7 @@ Cloudflare KV: "latest" + 8 compact history records
 Comparison and price history on your free *.workers.dev address
 ```
 
-The updater discovers the current cards from the catalog and both booster pools on each run. It fetches the Mythical prices, validates the result, and uploads a complete snapshot. A failed collection leaves the previously published snapshot in place.
+The updater discovers the current cards from the catalog and both booster pools on each run. With `--top 1000`, it selects wiki ranks 1–1000 and includes any additional Mythicals needed for complete booster coverage. It fetches both medians in one price request per character, with two reusable HTTPS connections and a shared two-per-second limit. Throttling honors Retry-After and slows the shared pace. Up to 1% isolated failures retain visibly stale prices; stale values are excluded from comparison averages and never recorded as fresh history. Widespread failures retain the previous snapshot. The workflow has a 25-minute timeout and the collector a 23-minute deadline.
 
 The page checks the stored snapshot every five minutes while open. **Check for updates reloads that stored snapshot; it does not start another collection from Kyara.** To collect prices immediately, run the **Update prices** workflow manually on GitHub. The timestamp distinguishes the data's age from the time you opened the page.
 
@@ -26,7 +26,7 @@ The page checks the stored snapshot every five minutes while open. **Check for u
 
 ## Price history
 
-The comparison table includes **24h change**, with high-to-low and low-to-high sort options and a CSV column. It uses the history chart's first-to-last sample percentage within the past 24 hours for the selected 7-day or 30-day market median. Fewer than two observations, missing endpoint prices, or a zero starting price display as unavailable and sort last. Eight small `/api/changes?bucket=0` through `bucket=7` requests read the existing history on each dashboard refresh; no new source collection or storage writes are needed.
+The market table includes wiki rank, rarity, both medians, sales and sortable 24h percentage changes. Search, rarity/booster filters and sorting run locally. Pagination renders 50 rows; CSV exports all matching cards across pages. Top-1,000 snapshots contain precomputed percentages; the dashboard does not read history buckets to calculate them. Legacy snapshots still use the compatible changes endpoint.
 
 Open **Price history** in the navigation, or follow a card's **Price history** link in the comparison table. Search by card or series, select a card, then choose **24 hours**, **7 days**, or **30 days**. The separate **Price tracked** control selects the 7-day or 30-day market median to plot. Chart windows do not recalculate those medians. Hover, tap, or use the arrow keys to inspect a point; the observations table lists exact values.
 
@@ -82,3 +82,15 @@ node --test tests/*.test.mjs
 ```
 
 Keep API tokens in GitHub Actions secrets. The web page and deployed Worker need no token because the Worker uses its KV binding. Only the scheduled upload job receives the Cloudflare upload credentials.
+
+## Top-1,000 migration and storage
+
+The workflow runs `python scripts/update_prices.py --top 1000 --output data/latest.json --upload` on the existing `13,43 * * * *` schedule. GitHub can delay scheduled jobs. Standard runners for this public repository use the existing free setup. No new cloud service, account, or secrets are required.
+
+The table includes exactly the current wiki top 1,000 (rank 0 in the source becomes displayed #0001). Membership is refreshed every collection; stable character IDs preserve history when ranks change. Mythical pool comparison cards outside the top 1,000 can remain in the snapshot for complete comparisons without appearing in the ranked table.
+
+The first successful top-card upload migrates the existing eight history keys in place. Schema 2 stores run-length encoded median arrays and one JSON string per card so chart reads only decode the selected card. The shared timestamp list retains every observation, including unchanged prices. Schema 1 is still readable. Cards leaving the tracked set keep their prior observations until the rolling 30-day cutoff removes them. New cards have no invented prior observations.
+
+At 48 scheduled runs, the eight history keys plus latest still require 432 writes daily. Individual daily manual runs or failed/retried uploads add writes. A dashboard refresh reads one latest key, while a chart loads latest plus its single history bucket. All API endpoints remain read-only.
+
+A local stress fixture for 1,000 cards and 1,441 observations (every half hour for 30 days inclusive), with both prices changing every time, occupied approximately 33 MB across eight history groups. This is a fixture measurement, not a promise about future catalog churn or actual storage. Large value sizes are checked before upload; history is never silently truncated.

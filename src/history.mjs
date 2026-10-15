@@ -23,7 +23,7 @@ export function selectHistory(history, id, range, now = Date.now()) {
     windowStart: new Date(start * 1000).toISOString(), windowEnd: new Date(end * 1000).toISOString(),
     updatedAt: null, firstSeenAt: null, card: null, points: [] };
   if (history === null) return result;
-  if (history?.schemaVersion !== 1 || history.bucket !== id % BUCKETS || history.bucketCount !== BUCKETS
+  if (![1, 2].includes(history?.schemaVersion) || history.bucket !== id % BUCKETS || history.bucketCount !== BUCKETS
       || !Array.isArray(history.timestamps) || !history.timestamps.length || !history.cards
       || typeof history.cards !== 'object' || Array.isArray(history.cards)
       || typeof history.updatedAt !== 'string' || !Number.isFinite(Date.parse(history.updatedAt))) {
@@ -36,8 +36,23 @@ export function selectHistory(history, id, range, now = Date.now()) {
   }
   if (prior !== Date.parse(history.updatedAt) / 1000) throw new Error('Misaligned history timestamp.');
   result.updatedAt = history.updatedAt;
-  const card = history.cards[String(id)];
+  let card = history.cards[String(id)];
   if (!card) return result;
+  if (history.schemaVersion === 2) {
+    if (typeof card !== 'string') throw new Error('Invalid compact card.');
+    card = JSON.parse(card);
+    for (const field of ['median7d', 'median30d']) {
+      const runs = card[field], values = [];
+      if (!Array.isArray(runs) || !runs.length) throw new Error('Invalid price runs.');
+      for (let i = 0; i < runs.length; i++) {
+        const pair = runs[i], end = i + 1 < runs.length ? runs[i + 1]?.[0] : history.timestamps.length;
+        if (!Array.isArray(pair) || pair.length !== 2 || !Number.isSafeInteger(pair[0]) || pair[0] !== values.length
+            || !Number.isSafeInteger(end) || end <= pair[0] || end > history.timestamps.length || !price(pair[1])) throw new Error('Invalid price run.');
+        for (let j = pair[0]; j < end; j++) values.push(pair[1]);
+      }
+      card[field] = values;
+    }
+  }
   if (typeof card.name !== 'string' || !card.name || typeof card.series !== 'string'
       || !Number.isSafeInteger(card.firstSeenAt) || !Number.isSafeInteger(card.lastSeenAt)
       || card.firstSeenAt <= 0 || card.lastSeenAt < card.firstSeenAt || card.lastSeenAt > prior
@@ -93,7 +108,9 @@ export async function historyResponse(request, env, now = Date.now()) {
   try {
     if (!env.PRICES) throw new Error('Missing binding.');
     const raw = await env.PRICES.get(`history-v1-${id % BUCKETS}`, { type: 'text', cacheTtl: 60 });
-    const data = selectHistory(raw === null ? null : JSON.parse(raw), id, range, now);
+    const asOf = params.get('asOf'), stamp = asOf ? Date.parse(asOf) : now;
+    if (!Number.isFinite(stamp) || stamp > now + 60000 || stamp < now - 31 * 86400000) return reply({ error: 'Invalid history cutoff.' }, 400, head);
+    const data = selectHistory(raw === null ? null : JSON.parse(raw), id, range, stamp);
     return reply(data, 200, head);
   } catch {
     return reply({ error: 'Price history is temporarily unavailable. Please try again.' }, 503, head);
