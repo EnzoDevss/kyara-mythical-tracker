@@ -1,5 +1,5 @@
 const rarityNames = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
-import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel } from './history-data.js';
+import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel } from './history-data.js?v=smooth-1';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);

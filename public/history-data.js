@@ -29,6 +29,24 @@ export function summarizeHistory(points, metric) {
     known: known.length, total: points.length };
 }
 
+// Gentle monotone curves pass through samples without inventing price peaks.
+function smoothPath(points) {
+  if (!points.length) return '';
+  const slopes = points.slice(1).map((point, i) => (point.y - points[i].y) / (point.x - points[i].x));
+  const tangents = points.map((_, i) => {
+    if (i === 0) return (slopes[0] ?? 0) * 0.7;
+    if (i === points.length - 1) return slopes[i - 1] * 0.7;
+    const a = slopes[i - 1], b = slopes[i];
+    return a * b > 0 ? 0.7 * 2 * a * b / (a + b) : 0;
+  });
+  let path = `M${points[0].x.toFixed(2)},${points[0].y.toFixed(2)}`;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i], dx = (b.x - a.x) / 3;
+    path += ` C${(a.x + dx).toFixed(2)},${(a.y + tangents[i - 1] * dx).toFixed(2)} ${(b.x - dx).toFixed(2)},${(b.y - tangents[i] * dx).toFixed(2)} ${b.x.toFixed(2)},${b.y.toFixed(2)}`;
+  }
+  return path;
+}
+
 export function chartModel(data, metric, width = 900) {
   const left = 64, right = Math.max(left + 40, width - 22), top = 24, bottom = 274;
   const values = data.points.map(point => point[metric]).filter(isPrice);
@@ -38,18 +56,19 @@ export function chartModel(data, metric, width = 900) {
   const floor = Math.max(0, min - padding), ceiling = max + padding;
   const start = Date.parse(data.windowStart), span = Date.parse(data.windowEnd) - start;
   const dots = [], paths = [];
-  let path = '', previousTime = null;
+  let segment = [], previousTime = null;
+  const flush = () => { if (segment.length) paths.push(smoothPath(segment)); segment = []; };
   data.points.forEach((point, index) => {
     const time = Date.parse(point.at), value = point[metric];
-    if (!isPrice(value)) { if (path) paths.push(path); path = ''; previousTime = null; return; }
-    if (previousTime !== null && time - previousTime > 90 * 60000) { if (path) paths.push(path); path = ''; }
+    if (!isPrice(value)) { flush(); previousTime = null; return; }
+    if (previousTime !== null && time - previousTime > 90 * 60000) flush();
     const x = left + (time - start) / span * (right - left);
     const y = bottom - (value - floor) / (ceiling - floor) * (bottom - top);
-    path += `${path ? ' L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`;
+    segment.push({ x, y });
     dots.push({ x, y, index, value, at: point.at });
     previousTime = time;
   });
-  if (path) paths.push(path);
+  flush();
   const ticks = Array.from({ length: 5 }, (_, index) => ({ y: bottom - index / 4 * (bottom - top), value: floor + index / 4 * (ceiling - floor) }));
   return { paths, dots, ticks, left, right, top, bottom };
 }
