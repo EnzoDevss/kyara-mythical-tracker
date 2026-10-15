@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { selectHistory, historyResponse } from '../src/history.mjs';
 import worker from '../src/worker.mjs';
-import { validateHistory, summarizeHistory, chartModel } from '../public/history-data.js';
+import { validateHistory, summarizeHistory, chartModel, hourlyPoints } from '../public/history-data.js';
 
 const now = Date.parse('2026-10-14T16:00:00Z');
 const stamp = now / 1000;
@@ -88,4 +88,16 @@ test('first observation, constant prices and zero all have finite chart coordina
     assert.ok(Number.isFinite(model.dots[0].y));
     assert.ok(model.ticks.every(tick => Number.isFinite(tick.y) && Number.isFinite(tick.value)));
   }
+});
+
+test('hourly visuals use prior prices on full hours without altering raw observations', () => {
+  const data = { windowStart: '2026-10-15T10:15:00Z', windowEnd: '2026-10-15T14:20:00Z', points: [
+    { at: '2026-10-15T10:43:00Z', median7d: 100, median30d: 90 },
+    { at: '2026-10-15T11:13:00Z', median7d: 120, median30d: 110 }
+  ] };
+  const original = JSON.stringify(data);
+  const points = hourlyPoints(data);
+  assert.deepEqual(points.map(p => p.median7d), [100, 120, null, null]);
+  assert.ok(points.every(p => new Date(p.at).getUTCMinutes() === 0));
+  assert.equal(JSON.stringify(data), original);
 });

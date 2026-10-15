@@ -79,3 +79,16 @@ export function chartModel(data, metric, width = 900) {
   const ticks = Array.from({ length: 5 }, (_, index) => ({ y: bottom - index / 4 * (bottom - top), value: floor + index / 4 * (ceiling - floor) }));
   return { paths, areas, dots, ticks, left, right, top, bottom };
 }
+
+// Display-only hourly samples: use the most recent observation at or before each hour.
+export function hourlyPoints(data) {
+  const hour = 3600000, points = [], end = Date.parse(data.windowEnd);
+  let source = -1;
+  for (let time = Math.ceil(Date.parse(data.windowStart) / hour) * hour; time <= end; time += hour) {
+    while (source + 1 < data.points.length && Date.parse(data.points[source + 1].at) <= time) source++;
+    const point = data.points[source];
+    const fresh = point && time - Date.parse(point.at) <= 90 * 60000;
+    points.push({ at: new Date(time).toISOString(), median7d: fresh ? point.median7d : null, median30d: fresh ? point.median30d : null });
+  }
+  return points;
+}

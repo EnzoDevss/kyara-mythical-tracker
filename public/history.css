@@ -9,3 +9,5 @@
 .change-value{font-weight:650;white-space:nowrap}.change-value.gain{color:#44d79a}.change-value.loss{color:#ff7969}
 
 .chart-dot{display:none}.chart-selection{opacity:0}#history-chart:hover .chart-selection,#history-chart:focus-visible .chart-selection{opacity:1}
+
+.chart-hour-dot{fill:#ff6548;stroke:var(--white);stroke-width:1.2}

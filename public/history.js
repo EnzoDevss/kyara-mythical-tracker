@@ -1,5 +1,5 @@
 const rarityNames = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
-import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel } from './history-data.js?v=smooth-2';
+import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel, hourlyPoints } from './history-data.js?v=hourly-1';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -123,7 +123,12 @@ function drawChart() {
     return;
   }
   const width = Math.max(280, $('chart-frame').clientWidth);
-  state.model = chartModel(data, state.metric, width);
+  state.model = chartModel({ ...data, points: hourlyPoints(data) }, state.metric, width);
+  if (!state.model.dots.length) {
+    showEmpty('No hourly points yet', 'The chart uses the latest saved price at each full hour. The next full hour will appear after a successful update.');
+    $('point-readout').textContent = 'Raw observations remain available in the data table below.';
+    return;
+  }
   const model = state.model, root = $('history-chart');
   root.removeAttribute('hidden'); $('chart-empty').hidden = true;
   root.setAttribute('viewBox', `0 0 ${width} 320`);
@@ -133,7 +138,10 @@ function drawChart() {
   const axisDate = new Intl.DateTimeFormat(undefined, state.range === '24h' ? { hour: 'numeric', minute: '2-digit' } : { month: 'short', day: 'numeric' });
   const count = width < 500 ? 3 : 5;
   for (let i = 0; i < count; i++) {
-    const fraction = i / (count - 1), time = Date.parse(data.windowStart) + fraction * RANGE_SECONDS[state.range] * 1000;
+    const start = Date.parse(data.windowStart), end = Date.parse(data.windowEnd);
+    const firstHour = Math.ceil(start / 3600000) * 3600000, lastHour = Math.floor(end / 3600000) * 3600000;
+    const time = Math.round((firstHour + i / (count - 1) * (lastHour - firstHour)) / 3600000) * 3600000;
+    const fraction = (time - start) / (end - start);
     fragment.append(svg('text', { x: model.left + fraction * (model.right - model.left), y: model.bottom + 27, 'text-anchor': i === 0 ? 'start' : i === count - 1 ? 'end' : 'middle', class: 'chart-axis' }, axisDate.format(new Date(time))));
   }
   const defs = svg('defs', {});
@@ -142,13 +150,7 @@ function drawChart() {
   defs.append(gradient); fragment.append(defs);
   for (const area of model.areas || []) fragment.append(svg('path', { d: area, fill: 'url(#chart-area-fill)', 'pointer-events': 'none' }));
   for (const path of model.paths) fragment.append(svg('path', { d: path, class: 'chart-line' }));
-  // Keep dense charts legible while still showing isolated observations.
-  model.dots.forEach((dot, index, dots) => {
-    const connected = other => other && Math.abs(other.index - dot.index) === 1 && Math.abs(Date.parse(other.at) - Date.parse(dot.at)) <= 90 * 60000;
-    if (dots.length < 80 || (!connected(dots[index - 1]) && !connected(dots[index + 1]))) {
-      fragment.append(svg('circle', { cx: dot.x, cy: dot.y, r: 3, class: 'chart-dot' }));
-    }
-  });
+  for (const dot of model.dots) fragment.append(svg('circle', { cx: dot.x, cy: dot.y, r: 2.5, class: 'chart-hour-dot' }));
   fragment.append(svg('line', { id: 'chart-cursor', y1: model.top, y2: model.bottom, class: 'chart-cursor' }), svg('circle', { id: 'chart-selection', r: 5, class: 'chart-selection' }));
   const priceLabel = svg('g', { id: 'chart-price-label', class: 'chart-price-label', 'aria-hidden': 'true' });
   priceLabel.append(svg('rect', { id: 'chart-price-background', height: 26, rx: 6 }), svg('text', { id: 'chart-price-text', y: 17, 'text-anchor': 'middle' }));
@@ -175,7 +177,7 @@ function renderFreshness() {
   pill.textContent = !data.updatedAt ? 'Waiting for first collection' : stale ? 'History is getting old' : 'History recorded';
   $('history-updated').textContent = `${data.updatedAt ? `Collector updated ${date.format(new Date(data.updatedAt))}. ` : ''}${state.checked ? `Checked ${date.format(state.checked)}.` : ''}`;
   const points = data.points;
-  $('history-coverage').textContent = points.length ? `${points.length === 1 ? 'First observation saved. The next successful update adds another point.' : `Showing observations from ${date.format(new Date(points[0].at))} to ${date.format(new Date(points.at(-1).at))}.`} Every successful collection adds a point, even if the price stays the same. Only recorded data is shown.` : 'History fills in over time. A full 7-day or 30-day view needs that much time collecting data.';
+  $('history-coverage').textContent = points.length ? `${points.length === 1 ? 'First observation saved. The next successful update adds another point.' : `Showing observations from ${date.format(new Date(points[0].at))} to ${date.format(new Date(points.at(-1).at))}.`} The curve and dots show full hours (XX:00), using the latest saved price at or before each hour. Gaps over 90 minutes stay blank. All raw observations and summary statistics are unchanged.` : 'History fills in over time. A full 7-day or 30-day view needs that much time collecting data.';
 }
 
 async function loadHistory(force = false) {
