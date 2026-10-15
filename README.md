@@ -26,7 +26,7 @@ The page checks the stored snapshot every five minutes while open. **Check for u
 
 ## Price history
 
-The market table includes wiki rank, rarity, both medians, sales and sortable 24h percentage changes. Search, rarity/booster filters and sorting run locally. Pagination renders 50 rows; CSV exports all matching cards across pages. Top-1,000 snapshots contain precomputed percentages; the dashboard does not read history buckets to calculate them. Legacy snapshots still use the compatible changes endpoint.
+The market table includes wiki rank, rarity, both medians, sales and sortable 24h percentage changes. Search, rarity/booster filters and sorting run locally. Pagination renders 50 rows; CSV exports all matching cards across pages. Booster labels use the full Waifu/Husbando rosters across rarities; Both means listed in both or neither. The comparison panels continue to use only the Mythical cards in each booster. These labels reuse the existing roster requests and snapshot write. Top-1,000 snapshots contain precomputed percentages; the dashboard does not read history buckets to calculate them. Legacy snapshots still use the compatible changes endpoint.
 
 Open **Price history** in the navigation, or follow a card's **Price history** link in the comparison table. Search by card or series, select a card, then choose **24 hours**, **7 days**, or **30 days**. The separate **Price tracked** control selects the 7-day or 30-day market median to plot. Chart windows do not recalculate those medians. Hover, tap, or use the arrow keys to inspect a point; the observations table lists exact values.
 

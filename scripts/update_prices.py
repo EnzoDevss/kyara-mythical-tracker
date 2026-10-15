@@ -203,6 +203,9 @@ def validate_snapshot(snapshot: Any) -> None:
         require(card_id not in card_ids, f"Snapshot contains duplicate card ID {card_id}.")
         card_ids.add(card_id)
         nonempty_string(card.get("name"), f"Snapshot name for {card_id}")
+        if "boosters" in card:
+            require(isinstance(card["boosters"], list) and all(isinstance(x, str) and x in POOL_NAMES for x in card["boosters"])
+                    and len(set(card["boosters"])) == len(card["boosters"]), "Invalid booster membership.")
         require(card.get("rarity") in (("M", "L", "E", "R", "U", "C") if snapshot.get("selection") == "wiki-top" else ("M",)),
                 f"Snapshot card {card_id} has an invalid rarity.")
         require(isinstance(card.get("series"), str), f"Snapshot series for {card_id} must be a string.")
@@ -334,8 +337,10 @@ def collect_snapshot(client: JsonClient, now: Callable[[], str] = utc_now, *, to
                      previous: dict[str, Any] | None = None) -> dict[str, Any]:
     started = now()
     catalog = parse_catalog(client.get_kyara("/api/characters"))
-    pools = [parse_pool(client.get_kyara(f"/api/packs/{pool_id}/characters"), pool_id, catalog)
-             for pool_id in POOL_NAMES]
+    full_pools = {pool_id: client.get_kyara(f"/api/packs/{pool_id}/characters") for pool_id in POOL_NAMES}
+    pools = [parse_pool(full_pools[pool_id], pool_id, catalog) for pool_id in POOL_NAMES]
+    # Keep the original comparison pools Mythical-only. Full memberships are display metadata.
+    booster_ids = {pool_id: set(values) for pool_id, values in full_pools.items()}
     catalog_updated = now()
     ids = sorted({card_id for pool in pools for card_id in pool["cardIds"]})
     ranked_ids = set()
@@ -379,7 +384,8 @@ def collect_snapshot(client: JsonClient, now: Callable[[], str] = utc_now, *, to
                 "sourceUrl": f"{KYARA_BASE}/wiki/{card_id}"}
         if top_count is not None:
             card.update(rank=entry["rank"] + 1, inTop=card_id in ranked_ids,
-                        priceCollectedAt=observed, stale=stale)
+                        priceCollectedAt=observed, stale=stale,
+                        boosters=[pool_id for pool_id in POOL_NAMES if card_id in booster_ids[pool_id]])
         return card
     cards = []
     if top_count is not None and hasattr(client, "lock"):

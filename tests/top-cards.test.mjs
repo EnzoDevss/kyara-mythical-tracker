@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { selectHistory, historyResponse } from '../src/history.mjs';
-import { comparePools, validateSnapshot } from '../public/app.js';
+import { comparePools, validateSnapshot, cardBoosters, boosterLabel } from '../public/app.js';
 
 const now = Date.parse('2026-10-15T15:00:00Z'), stamp = now / 1000;
 const card = { name: 'Epic', series: 'Example', firstSeenAt: stamp - 86400, lastSeenAt: stamp,
@@ -37,4 +37,20 @@ test('mixed rarities never contaminate the Mythical booster average and stale pr
   assert.equal(comparePools(data).winner.id,'husbando');
   data.cards[1].stale = true;
   assert.equal(comparePools(data).complete,false);
+});
+
+test('all-rarity booster labels use both for dual or absent membership without changing Mythical comparison', () => {
+  const data = { pools: [{id:'waifu',cardIds:[1]},{id:'husbando',cardIds:[2]}], cards:[
+    {id:1,name:'M1',rarity:'M',median7d:100,boosters:['waifu']},
+    {id:2,name:'M2',rarity:'M',median7d:200,boosters:['husbando']},
+    {id:3,name:'L',rarity:'L',median7d:99999,boosters:['waifu']} ] };
+  const before = comparePools(data);
+  for (const [boosters,expected] of [[['waifu'],'Waifu'],[['husbando'],'Husbando'],[['waifu','husbando'],'Both'],[[],'Both']]) {
+    assert.equal(boosterLabel(cardBoosters({id:3,boosters},data)),expected);
+  }
+  assert.deepEqual(cardBoosters({id:3,boosters:[]},data),['waifu','husbando']);
+  assert.deepEqual(cardBoosters({id:1},data),['waifu']);
+  data.cards[2].boosters = ['husbando'];
+  assert.deepEqual(comparePools(data),before);
+  assert.equal(before.pools[0].total,1); assert.equal(before.pools[0].mean,100);
 });

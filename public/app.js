@@ -1,5 +1,11 @@
 export const RARITY_NAMES = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
 const POOL_IDS = ['waifu', 'husbando'];
+export function cardBoosters(card, snapshot) {
+  const memberships = Array.isArray(card.boosters) ? POOL_IDS.filter(id => card.boosters.includes(id))
+    : POOL_IDS.filter(id => snapshot.pools.some(pool => pool.id === id && pool.cardIds.some(key => String(key) === String(card.id))));
+  return memberships.length ? memberships : [...POOL_IDS];
+}
+export const boosterLabel = pools => pools.length === 2 ? 'Both' : pools[0] === 'waifu' ? 'Waifu' : 'Husbando';
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const STALE_AFTER_MS = 90 * 60 * 1000;
 const isPrice = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
@@ -177,20 +183,11 @@ function startDashboard() {
 
   function getRows() {
     if (!state.snapshot) return [];
-    const byId = new Map(state.snapshot.cards.map(card => [String(card.id), card]));
-    const memberships = new Map();
-    for (const poolId of POOL_IDS) {
-      const pool = state.snapshot.pools.find(item => item.id === poolId);
-      for (const id of pool.cardIds.map(String)) {
-        if (!memberships.has(id)) memberships.set(id, []);
-        memberships.get(id).push(poolId);
-      }
-    }
     const search = $('search').value.trim().toLocaleLowerCase();
     const poolFilter = $('pool').value;
     const key = state.period === 30 ? 'median30d' : 'median7d';
-    const rows = state.snapshot.cards.filter(card => state.snapshot.selection !== 'wiki-top' || card.inTop).map(card => ({ card, pools: memberships.get(String(card.id)) || [] }));
-    const filtered = rows.filter(({ card, pools }) => (!poolFilter || pools.includes(poolFilter)) && (!$('rarity').value || card.rarity === $('rarity').value) && (!search || `${card.name} ${typeof card.series === 'string' ? card.series : ''}`.toLocaleLowerCase().includes(search)));
+    const rows = state.snapshot.cards.filter(card => state.snapshot.selection !== 'wiki-top' || card.inTop).map(card => ({ card, pools: cardBoosters(card, state.snapshot) }));
+    const filtered = rows.filter(({ card, pools }) => (!poolFilter || (poolFilter === 'both' ? pools.length === 2 : pools.includes(poolFilter))) && (!$('rarity').value || card.rarity === $('rarity').value) && (!search || `${card.name} ${typeof card.series === 'string' ? card.series : ''}`.toLocaleLowerCase().includes(search)));
     const sort = $('sort').value;
     const nameCompare = (a, b) => a.card.name.localeCompare(b.card.name);
     filtered.sort((a, b) => {
@@ -231,10 +228,9 @@ function startDashboard() {
       history.href = `/history?card=${encodeURIComponent(String(card.id))}&range=24h&metric=median${state.period}d`;
       character.append(history);
       const booster = node('td', '');
-      for (const pool of pools) booster.append(node('span', `pool-label ${pool}`, pool === 'waifu' ? 'Waifus' : 'Husbandos'));
+      booster.append(node('span', `pool-label ${pools.length === 2 ? 'both' : pools[0]}`, boosterLabel(pools)));
       const rarity = node('td', '');
       rarity.append(node('span', `rarity-label rarity-${card.rarity}`, RARITY_NAMES[card.rarity] || card.rarity));
-      if (!pools.length) booster.append(node('span', 'muted', '—'));
       tr.append(character, rarity, booster);
       for (const period of [7, 30]) {
         const value = card[`median${period}d`];
@@ -369,8 +365,8 @@ function startDashboard() {
   }
   $('download').addEventListener('click', () => {
     if (!state.snapshot) return;
-    const header = ['Wiki rank', 'Rarity', 'Character', 'Series', 'Mythical booster', '7-day median (chakra)', '30-day median (chakra)', '30-day sales', 'Collected at (UTC)', 'Source', 'Price collected at (UTC)', 'Stale price', `24h change (%) - ${state.period}-day median`];
-    const lines = getRows().map(({ card, pools }) => [card.rank ?? '', RARITY_NAMES[card.rarity] || card.rarity, card.name, typeof card.series === 'string' ? card.series : '', pools.map(id => id === 'waifu' ? 'Waifus' : 'Husbandos').join(' / '), card.median7d, card.median30d, card.sales30d, state.snapshot.collectedAt, `https://kyara.games/wiki/${card.id}`, card.priceCollectedAt || state.snapshot.collectedAt, Boolean(card.stale)]);
+    const header = ['Wiki rank', 'Rarity', 'Character', 'Series', 'Booster', '7-day median (chakra)', '30-day median (chakra)', '30-day sales', 'Collected at (UTC)', 'Source', 'Price collected at (UTC)', 'Stale price', `24h change (%) - ${state.period}-day median`];
+    const lines = getRows().map(({ card, pools }) => [card.rank ?? '', RARITY_NAMES[card.rarity] || card.rarity, card.name, typeof card.series === 'string' ? card.series : '', boosterLabel(pools), card.median7d, card.median30d, card.sales30d, state.snapshot.collectedAt, `https://kyara.games/wiki/${card.id}`, card.priceCollectedAt || state.snapshot.collectedAt, Boolean(card.stale)]);
     getRows().forEach(({ card }, index) => lines[index].push(cardChange(card)));
     const csv = '\uFEFF' + [header, ...lines].map(row => row.map(csvCell).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

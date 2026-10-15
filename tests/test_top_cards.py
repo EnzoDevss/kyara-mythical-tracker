@@ -61,6 +61,18 @@ class TopCards(unittest.TestCase):
         self.assertEqual(len(data["cards"]), 2)
         self.assertEqual([c["id"] for c in data["cards"] if c["inTop"]], [1])
 
+    def test_full_booster_labels_are_separate_from_mythical_comparison_pools(self):
+        payloads = catalog()
+        payloads['/api/packs/husbando/characters'] = [2]
+        client = FakeClient(payloads)
+        data = updater.collect_snapshot(client, now=lambda: '2026-10-14T15:00:00Z', top_count=3)
+        cards = {c['id']: c for c in data['cards']}
+        self.assertEqual(cards[3]['boosters'], ['waifu'])
+        self.assertEqual(cards[2]['boosters'], ['husbando'])
+        self.assertEqual(data['pools'], snapshot()['pools'])
+        self.assertEqual(client.calls.count('/api/packs/waifu/characters'), 1)
+        self.assertEqual(len(client.calls), 6)
+
     def test_isolated_failure_carries_price_but_no_new_history_observation(self):
         payloads = catalog()
         payloads["/api/market/prices/1"] = updater.UpdateError("network unavailable")
