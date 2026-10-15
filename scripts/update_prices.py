@@ -368,7 +368,11 @@ def collect_snapshot(client: JsonClient, now: Callable[[], str] = utc_now, *, to
             stale = True
         else:
             # Schema failures are fatal, not disguised as missing prices.
-            price = parse_price(payload, card_id)
+            try:
+                price = parse_price(payload, card_id)
+            except UpdateError:
+                stopped.set()
+                raise
             observed, stale = now(), False
         card = {"id": card_id, "name": nonempty_string(entry.get("name"), "Catalog name"),
                 "rarity": entry["rarity"], "series": entry.get("series") or "", **price,
