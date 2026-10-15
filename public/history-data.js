@@ -68,7 +68,7 @@ export function chartModel(data, metric, width = 900) {
   data.points.forEach((point, index) => {
     const time = Date.parse(point.at), value = point[metric];
     if (!isPrice(value)) { flush(); previousTime = null; return; }
-    if (previousTime !== null && time - previousTime > 90 * 60000) flush();
+    if (previousTime !== null && time - previousTime > (data.chartInterval === 'daily' ? 27 * 3600000 : 90 * 60000)) flush();
     const x = left + (time - start) / span * (right - left);
     const y = bottom - (value - floor) / (ceiling - floor) * (bottom - top);
     segment.push({ x, y });
@@ -89,6 +89,23 @@ export function hourlyPoints(data) {
     const point = data.points[source];
     const fresh = point && time - Date.parse(point.at) <= 90 * 60000;
     points.push({ at: new Date(time).toISOString(), median7d: fresh ? point.median7d : null, median30d: fresh ? point.median30d : null });
+  }
+  return points;
+}
+
+// Local calendar-day closes for display only; unfinished days are excluded.
+export function dailyPoints(data) {
+  const points = [], end = Date.parse(data.windowEnd);
+  const cutoff = new Date(data.windowStart);
+  cutoff.setHours(23, 59, 59, 0);
+  let source = -1;
+  while (cutoff.getTime() <= end) {
+    const time = cutoff.getTime(), start = new Date(cutoff);
+    start.setHours(0, 0, 0, 0);
+    while (source + 1 < data.points.length && Date.parse(data.points[source + 1].at) <= time) source++;
+    const point = data.points[source], sameDay = point && Date.parse(point.at) >= start.getTime();
+    points.push({ at: cutoff.toISOString(), median7d: sameDay ? point.median7d : null, median30d: sameDay ? point.median30d : null });
+    cutoff.setDate(cutoff.getDate() + 1);
   }
   return points;
 }

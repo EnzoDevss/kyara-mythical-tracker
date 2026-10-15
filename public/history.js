@@ -1,5 +1,5 @@
 const rarityNames = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
-import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel, hourlyPoints } from './history-data.js?v=hourly-1';
+import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel, hourlyPoints, dailyPoints } from './history-data.js?v=daily-1';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -123,9 +123,10 @@ function drawChart() {
     return;
   }
   const width = Math.max(280, $('chart-frame').clientWidth);
-  state.model = chartModel({ ...data, points: hourlyPoints(data) }, state.metric, width);
+  const daily = state.range !== '24h';
+  state.model = chartModel({ ...data, chartInterval: daily ? 'daily' : 'hourly', points: daily ? dailyPoints(data) : hourlyPoints(data) }, state.metric, width);
   if (!state.model.dots.length) {
-    showEmpty('No hourly points yet', 'The chart uses the latest saved price at each full hour. The next full hour will appear after a successful update.');
+    showEmpty(daily ? 'No completed days yet' : 'No hourly points yet', daily ? 'Daily dots appear at 23:59:59 in your local time, using the last saved price of each completed day.' : 'The chart uses the latest saved price at each full hour. The next full hour will appear after a successful update.');
     $('point-readout').textContent = 'Raw observations remain available in the data table below.';
     return;
   }
@@ -136,13 +137,15 @@ function drawChart() {
   fragment.append(svg('title', { id: 'plot-title' }, `${$('card-name').textContent}: ${$('chart-metric').textContent}`), svg('desc', { id: 'plot-description' }, `${stats.known} observations in the selected ${state.range} window. Prices range from ${stats.low} to ${stats.high} chakra. Use left and right arrow keys to inspect points. A data table is available below.`));
   for (const tick of model.ticks) fragment.append(svg('line', { x1: model.left, x2: model.right, y1: tick.y, y2: tick.y, class: 'chart-grid' }), svg('text', { x: model.left - 10, y: tick.y + 4, 'text-anchor': 'end', class: 'chart-axis' }, number.format(tick.value)));
   const axisDate = new Intl.DateTimeFormat(undefined, state.range === '24h' ? { hour: 'numeric', minute: '2-digit' } : { month: 'short', day: 'numeric' });
-  const count = width < 500 ? 3 : 5;
+  const count = daily ? Math.min(width < 500 ? 3 : 5, state.model.dots.length) : width < 500 ? 3 : 5;
   for (let i = 0; i < count; i++) {
     const start = Date.parse(data.windowStart), end = Date.parse(data.windowEnd);
     const firstHour = Math.ceil(start / 3600000) * 3600000, lastHour = Math.floor(end / 3600000) * 3600000;
-    const time = Math.round((firstHour + i / (count - 1) * (lastHour - firstHour)) / 3600000) * 3600000;
-    const fraction = (time - start) / (end - start);
-    fragment.append(svg('text', { x: model.left + fraction * (model.right - model.left), y: model.bottom + 27, 'text-anchor': i === 0 ? 'start' : i === count - 1 ? 'end' : 'middle', class: 'chart-axis' }, axisDate.format(new Date(time))));
+    const time = Math.round((firstHour + i / Math.max(1, count - 1) * (lastHour - firstHour)) / 3600000) * 3600000;
+    const labelTime = daily ? state.model.dots[Math.round(i / Math.max(1, count - 1) * (state.model.dots.length - 1))].at : time;
+    const fraction = (typeof labelTime === 'number' ? labelTime : Date.parse(labelTime)) - start;
+    const position = fraction / (end - start);
+    fragment.append(svg('text', { x: model.left + position * (model.right - model.left), y: model.bottom + 27, 'text-anchor': i === 0 ? 'start' : i === count - 1 ? 'end' : 'middle', class: 'chart-axis' }, axisDate.format(new Date(labelTime))));
   }
   const defs = svg('defs', {});
   const gradient = svg('linearGradient', { id: 'chart-area-fill', x1: 0, y1: model.top, x2: 0, y2: model.bottom, gradientUnits: 'userSpaceOnUse' });
@@ -177,7 +180,7 @@ function renderFreshness() {
   pill.textContent = !data.updatedAt ? 'Waiting for first collection' : stale ? 'History is getting old' : 'History recorded';
   $('history-updated').textContent = `${data.updatedAt ? `Collector updated ${date.format(new Date(data.updatedAt))}. ` : ''}${state.checked ? `Checked ${date.format(state.checked)}.` : ''}`;
   const points = data.points;
-  $('history-coverage').textContent = points.length ? `${points.length === 1 ? 'First observation saved. The next successful update adds another point.' : `Showing observations from ${date.format(new Date(points[0].at))} to ${date.format(new Date(points.at(-1).at))}.`} The curve and dots show full hours (XX:00), using the latest saved price at or before each hour. Gaps over 90 minutes stay blank. All raw observations and summary statistics are unchanged.` : 'History fills in over time. A full 7-day or 30-day view needs that much time collecting data.';
+  $('history-coverage').textContent = points.length ? `${points.length === 1 ? 'First observation saved. The next successful update adds another point.' : `Showing observations from ${date.format(new Date(points[0].at))} to ${date.format(new Date(points.at(-1).at))}.`} ${state.range === '24h' ? 'The curve and dots show full hours (XX:00), using the latest saved price at or before each hour. Gaps over 90 minutes stay blank.' : 'The curve and dots show completed days at 23:59:59 in your local time, using the last saved price that day. Days without data stay blank; today appears after it ends.'} All raw observations and summary statistics are unchanged.` : 'History fills in over time. A full 7-day or 30-day view needs that much time collecting data.';
 }
 
 async function loadHistory(force = false) {

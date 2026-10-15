@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { selectHistory, historyResponse } from '../src/history.mjs';
 import worker from '../src/worker.mjs';
-import { validateHistory, summarizeHistory, chartModel, hourlyPoints } from '../public/history-data.js';
+import { validateHistory, summarizeHistory, chartModel, hourlyPoints, dailyPoints } from '../public/history-data.js';
 
 const now = Date.parse('2026-10-14T16:00:00Z');
 const stamp = now / 1000;
@@ -100,4 +100,20 @@ test('hourly visuals use prior prices on full hours without altering raw observa
   assert.deepEqual(points.map(p => p.median7d), [100, 120, null, null]);
   assert.ok(points.every(p => new Date(p.at).getUTCMinutes() === 0));
   assert.equal(JSON.stringify(data), original);
+});
+
+test('daily chart closes use the last same-day price and exclude today', () => {
+  const at = (day, hour) => new Date(2026, 9, day, hour).toISOString();
+  const data = { windowStart: at(12, 12), windowEnd: at(15, 12), points: [
+    { at: at(12, 13), median7d: 100, median30d: 90 },
+    { at: at(12, 23), median7d: 120, median30d: 110 },
+    { at: at(14, 22), median7d: 140, median30d: 130 },
+    { at: at(15, 10), median7d: 150, median30d: 140 }
+  ] };
+  const original = JSON.stringify(data), points = dailyPoints(data);
+  assert.deepEqual(points.map(p => p.median7d), [120, null, 140]);
+  assert.ok(points.every(p => { const d = new Date(p.at); return d.getHours() === 23 && d.getMinutes() === 59 && d.getSeconds() === 59; }));
+  assert.equal(JSON.stringify(data), original);
+  const model = chartModel({ ...data, chartInterval: 'daily', points: points.filter(p => p.median7d !== null) }, 'median7d');
+  assert.equal(model.paths.length, 2);
 });
