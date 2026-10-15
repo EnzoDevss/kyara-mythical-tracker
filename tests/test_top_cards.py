@@ -2,6 +2,9 @@
 import copy
 import json
 import unittest
+import urllib.request
+import urllib.error
+from unittest.mock import patch
 from test_updater import updater, FakeClient, responses, price, snapshot, CREDENTIALS
 from test_history import collection
 
@@ -16,6 +19,30 @@ def catalog():
 
 
 class TopCards(unittest.TestCase):
+    def test_persistent_transport_reuses_connection_and_preserves_http_status(self):
+        class Response:
+            status = 200
+            headers = {}
+            def read(self): return b''
+        class Connection:
+            def __init__(self, *args, **kwargs): self.calls = 0
+            def request(self, *args, **kwargs): self.calls += 1
+            def getresponse(self): return response
+        response = Response()
+        connection = Connection()
+        with patch.object(updater.http.client, 'HTTPSConnection', return_value=connection):
+            opener = updater.PersistentOpener()
+            request = urllib.request.Request('https://kyara.games/api/test')
+            opener.open(request)
+            opener.open(request)
+            self.assertEqual(connection.calls, 2)
+            response.status = 429
+            response.headers = {'Retry-After': '90'}
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                opener.open(request)
+            self.assertEqual(raised.exception.code, 429)
+            self.assertEqual(raised.exception.headers['Retry-After'], '90')
+
     def test_rank_selects_cards_once_and_preserves_comparison_membership(self):
         client = FakeClient(catalog())
         data = updater.collect_snapshot(client, now=lambda: "2026-10-14T15:00:00Z", top_count=3)
