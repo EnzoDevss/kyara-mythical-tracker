@@ -68,3 +68,15 @@ test('trade routing does not permit cross-origin usage or require any KV writes'
   assert.equal((await tradesResponse(new Request('https://tracker/api/trades/catalog'),env)).status,200);
   assert.equal(name,'shared-trade-search-v1');
 });
+test('server permits top-1000 Legendaries while rejecting older ranks and other offered rarities', async () => {
+  const raw = [...Array.from({length:200},(_,i)=>({id:i+1,name:'M'+i,rarity:'M',rank:i})),
+    {id:500,name:'L in',rarity:'L',rank:999},{id:501,name:'L out',rarity:'L',rank:1000},{id:502,name:'Epic',rarity:'E',rank:300}];
+  const {coordinator}=setup(async url=>url.endsWith('/characters')?Response.json(raw):Response.json([offer('legendary',500)]));
+  coordinator.catalog=null;
+  const req=id=>new Request('https://tracker/api/trades/batch',{method:'POST',body:JSON.stringify({ids:[id]})});
+  const response=await coordinator.fetch(req(500)), events=[];
+  await readEvents(response,e=>events.push(e));
+  assert.equal(events[0].cardId,500);assert.equal(events[0].offers.length,1);
+  assert.equal((await coordinator.fetch(req(501))).status,400);
+  assert.equal((await coordinator.fetch(req(502))).status,400);
+});

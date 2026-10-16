@@ -1,6 +1,8 @@
-import { priceKnown, searchOrder, readEvents, tradeMetrics, compareTradeRows } from './trades-data.js?v=sort-1';
+import { priceKnown, searchOrder, readEvents, tradeMetrics, compareTradeRows, matchesRequestedCard } from './trades-data.js?v=tabs-1';
 const $ = id => document.getElementById(id);
-const state = { cards: new Map(), prices: new Map(), order: [], results: new Map(), failures: new Map(), searched: new Set(), running: false, controller: null, limit: 60, token: 0, renderTimer: null };
+const createState = () => ({ cards: new Map(), prices: new Map(), order: [], results: new Map(), failures: new Map(), searched: new Set(), running: false, controller: null, limit: 60, token: 0, renderTimer: null, trackedIds: new Set(), snapshotAt: '', query: '', sort: 'median-desc', requestedFilter: false, message: 'Preparing the search list…', badge: 'Ready to search', badgeClass: 'status-pill pending' });
+const tabStates = { M: createState(), L: createState() };
+let rarity = 'M', state = tabStates.M, scanTask = null, switching = false;
 const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const date = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -12,6 +14,7 @@ function cardLink(card, className) {
   const a = node('a', card.name, className); a.href = 'https://kyara.games/wiki/' + card.id; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a;
 }
 function progress(text) {
+  state.message = text;
   $('scan-status').textContent = text;
   $('scan-progress').value = state.searched.size;
 }
@@ -27,7 +30,7 @@ function render() {
       if (Date.parse(offer.expiresAt) <= now || seen.has(offer.id)) continue;
       seen.add(offer.id);
       const wanted = offer.wantIds.map(id => state.cards.get(id) || { id, name: 'Card #' + id, series: '' });
-      if ($('trade-legendary').checked && !wanted.some(card => card.rarity === 'L')) continue;
+      if ($('trade-legendary').checked && !wanted.some(card => matchesRequestedCard(card, rarity, state.trackedIds))) continue;
       const searchable = [card.name, card.series, offer.user.pseudo, ...wanted.flatMap(c => [c.name, c.series])].join(' ').toLocaleLowerCase();
       if (query && !searchable.includes(query)) continue;
       rows.push({ card, result, offer, wanted, metrics: tradeMetrics(offer, state.prices) });
@@ -40,13 +43,15 @@ function render() {
       const article = node('article', undefined, 'trade-offer');
       const main = node('div', undefined, 'trade-offer-main');
       const given = node('div', undefined, 'trade-offered');
-      given.append(node('p', 'OFFERED · MYTHICAL', 'eyebrow'), cardLink(card, 'trade-card-name'), node('span', card.series, 'trade-series'), node('div', money(card.id), 'trade-price'));
+      given.append(node('p', rarity === 'M' ? 'OFFERED · MYTHICAL' : 'OFFERED · LEGENDARY', 'eyebrow'), cardLink(card, 'trade-card-name'), node('span', card.series, 'trade-series'), node('div', money(card.id), 'trade-price'));
       const request = node('div', undefined, 'trade-wanted'); request.append(node('p', 'IN RETURN FOR ONE OF', 'eyebrow'));
       const choices = node('div', undefined, 'wanted-list');
       for (const c of wanted) {
         const choice = node('div', undefined, 'wanted-card');
-        if ($('trade-legendary').checked && c.rarity === 'L') choice.classList.add('wanted-legendary');
-        choice.append(cardLink(c), node('span', money(c.id))); choices.append(choice);
+        if ($('trade-legendary').checked && matchesRequestedCard(c, rarity, state.trackedIds)) choice.classList.add(rarity === 'M' ? 'wanted-legendary' : 'wanted-epic');
+        choice.append(cardLink(c), node('span', money(c.id)));
+        if (rarity === 'L' && !state.trackedIds.has(c.id)) choice.append(node('span', 'Outside top 1,000'));
+        choices.append(choice);
       }
       if (!wanted.length) choices.append(node('span', 'No requested cards listed.'));
       request.append(choices); main.append(given, node('div', '⇄', 'trade-arrow'), request);
@@ -71,7 +76,7 @@ function render() {
   if (state.failures.size) warnings.push(state.failures.size + ' card searches failed. Any retained results for those cards are older; refresh to retry.');
   const capped = [...state.results.values()].filter(r => r.capped).length;
   if (capped) warnings.push(capped + ' card responses reached 200 offers. Older offers for those cards may be omitted by Kyara.');
-  if (state.searched.size && state.searched.size < state.order.length && !state.running) warnings.push('Partial scan: not every Mythical was checked.');
+  if (state.searched.size && state.searched.size < state.order.length && !state.running) warnings.push('Partial scan: not every ' + (rarity === 'M' ? 'Mythical' : 'Legendary') + ' was checked.');
   $('scan-warnings').textContent = warnings.join(' ');
 }
 function sleep(ms, signal) {
@@ -146,15 +151,54 @@ async function init() {
     const [catalogResponse, pricesResponse] = await Promise.all([fetch('/api/trades/catalog', { cache: 'no-store' }), fetch('/api/prices', { cache: 'no-store' })]);
     if (!catalogResponse.ok || !pricesResponse.ok) throw new Error('Could not load cards and saved prices. Reload to try again.');
     const [catalog, snapshot] = await Promise.all([catalogResponse.json(), pricesResponse.json()]);
-    state.cards = new Map(catalog.cards.map(c => [c.id, c])); state.prices = new Map(snapshot.cards.map(c => [c.id, c]));
-    state.order = searchOrder(catalog.cards, state.prices);
-    if (!state.order.length) throw new Error('No Mythical cards available.');
-    $('scan-progress').max = state.order.length;
-    $('price-note').textContent = `${state.order.length} Mythicals · order uses 7-day medians saved ${date.format(new Date(snapshot.collectedAt))}`;
-    progress('Ready. Press Refresh trades to start your own scan.'); $('scan-start').disabled = false;
+    const cards = new Map(catalog.cards.map(c => [c.id, c])), prices = new Map(snapshot.cards.map(c => [c.id, c]));
+    const trackedIds = new Set(snapshot.cards.filter(c => c.inTop !== false && c.rank >= 1 && c.rank <= 1000).map(c => c.id));
+    for (const [key, tab] of Object.entries(tabStates)) {
+      tab.cards = cards; tab.prices = prices; tab.trackedIds = trackedIds; tab.snapshotAt = snapshot.collectedAt;
+      tab.order = searchOrder(catalog.cards.filter(c => key === 'M' || trackedIds.has(c.id)), prices, key);
+      tab.message = 'Ready. Press Refresh trades to start your own scan.';
+    }
+    updateTab();
   } catch (error) { $('scan-badge').textContent = 'Unavailable'; progress(error.message); }
 }
-$('scan-start').addEventListener('click', scan);
+function updateTab() {
+  const mythical = rarity === 'M', label = mythical ? 'Mythical' : 'Legendary';
+  for (const [id, selected] of [['tab-mythical', mythical], ['tab-legendary', !mythical]]) {
+    $(id).setAttribute('aria-selected', String(selected)); $(id).tabIndex = selected ? 0 : -1;
+  }
+  $('trade-panel').setAttribute('aria-labelledby', mythical ? 'tab-mythical' : 'tab-legendary');
+  $('trade-eyebrow').textContent = 'THE ' + label.toUpperCase() + ' TRADE BOARD';
+  $('trade-intro-copy').textContent = (mythical ? 'Search every Mythical' : 'Search the Legendaries in the tracked wiki top 1,000') + ', from highest 7-day median to lowest. Offers appear as each card is checked. Your refresh updates only your list.';
+  $('results-title').textContent = label + ' offers';
+  $('trade-request-filter-label').textContent = mythical ? 'Requests at least one Legendary' : 'Requests at least one Epic or a card outside the top 1,000';
+  $('trade-epic-note').hidden = mythical;
+  $('scan-progress').max = Math.max(1, state.order.length);
+  $('scan-progress').setAttribute('aria-label', (mythical ? 'Mythicals' : 'Legendaries') + ' searched');
+  $('price-note').textContent = state.snapshotAt ? `${state.order.length} ${mythical ? 'Mythicals' : 'Legendaries'} · order uses 7-day medians saved ${date.format(new Date(state.snapshotAt))}` : 'Loading card catalog and saved prices…';
+  $('trade-search').value = state.query; $('trade-sort').value = state.sort; $('trade-legendary').checked = state.requestedFilter;
+  $('scan-badge').textContent = state.badge; $('scan-badge').className = state.badgeClass;
+  $('scan-start').disabled = !state.order.length; $('scan-stop').hidden = true;
+  progress(state.message); render();
+}
+async function switchTab(next) {
+  if (next === rarity || switching) return;
+  switching = true;
+  try {
+    state.query = $('trade-search').value; state.sort = $('trade-sort').value; state.requestedFilter = $('trade-legendary').checked;
+    if (state.running) { state.controller?.abort(); await scanTask; }
+    state.badge = $('scan-badge').textContent; state.badgeClass = $('scan-badge').className;
+    clearTimeout(state.renderTimer); state.renderTimer = null;
+    rarity = next; state = tabStates[next]; updateTab();
+  } finally { switching = false; }
+}
+$('scan-start').addEventListener('click', () => { if (!switching) scanTask = scan(); });
+$('tab-mythical').addEventListener('click', () => switchTab('M'));
+$('tab-legendary').addEventListener('click', () => switchTab('L'));
+for (const id of ['tab-mythical', 'tab-legendary']) $(id).addEventListener('keydown', async event => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault(); const next = event.key === 'Home' ? 'M' : event.key === 'End' ? 'L' : rarity === 'M' ? 'L' : 'M';
+  await switchTab(next); $(next === 'M' ? 'tab-mythical' : 'tab-legendary').focus();
+});
 $('scan-stop').addEventListener('click', () => state.controller?.abort());
 $('trade-search').addEventListener('input', () => { state.limit = 60; render(); });
 $('trade-sort').addEventListener('change', () => { state.limit = 60; render(); });

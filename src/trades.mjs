@@ -47,7 +47,8 @@ export class TradesCoordinator {
         .map(c => ({ id: c.id, name: c.name, series: typeof c.series === 'string' ? c.series : '', rarity: c.rarity, rank: Number.isSafeInteger(c.rank) ? c.rank + 1 : null }));
       const mythicals = new Set(cards.filter(c => c.rarity === 'M').map(c => c.id));
       if (!mythicals.size) throw problem('No Mythicals found in the catalog.');
-      this.catalog = { cards, mythicals, knownIds: new Set(cards.map(c => c.id)) }; this.catalogAt = this.now();
+      const searchable = new Set(cards.filter(c => c.rarity === 'M' || c.rarity === 'L' && c.rank >= 1 && c.rank <= 1000).map(c => c.id));
+      this.catalog = { cards, mythicals, searchable, knownIds: new Set(cards.map(c => c.id)) }; this.catalogAt = this.now();
       return this.catalog;
     })().finally(() => { this.catalogLoading = null; });
     return this.catalogLoading;
@@ -118,11 +119,11 @@ export class TradesCoordinator {
         if (Number(request.headers.get('content-length')) > 1024) return json({ error: 'Request too large.' }, 413);
         const body = await request.text(); if (body.length > 1024) return json({ error: 'Request too large.' }, 413);
         try { ids = JSON.parse(body).ids; } catch { return json({ error: 'Invalid request.' }, 400); }
-        if (!Array.isArray(ids) || !ids.length || ids.length > 10 || new Set(ids).size !== ids.length || ids.some(id => !Number.isSafeInteger(id) || id <= 0)) return json({ error: 'Choose up to ten distinct Mythicals.' }, 400);
+        if (!Array.isArray(ids) || !ids.length || ids.length > 10 || new Set(ids).size !== ids.length || ids.some(id => !Number.isSafeInteger(id) || id <= 0)) return json({ error: 'Choose up to ten distinct tracked cards.' }, 400);
       }
       const catalog = await this.getCatalog();
       if (path.endsWith('/catalog')) return json({ cards: catalog.cards, cachedAt: this.catalogAt });
-      if (ids.some(id => !catalog.mythicals.has(id))) return json({ error: 'Only current Mythical cards can be searched.' }, 400);
+      if (ids.some(id => !(catalog.searchable || catalog.mythicals).has(id))) return json({ error: 'Choose a Mythical or a top-1,000 Legendary.' }, 400);
       if (this.now() < this.blockedUntil) return json({ error: 'Kyara requested a pause.', retryAfter: this.blockedUntil - this.now() }, 429, { 'Retry-After': String(Math.ceil((this.blockedUntil - this.now()) / 1000)) });
       let cancelled = false;
       const encoder = new TextEncoder();

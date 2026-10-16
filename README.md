@@ -96,12 +96,15 @@ At 48 scheduled runs, the eight history keys plus latest still require 432 write
 A local stress fixture for 1,000 cards and 1,441 observations (every half hour for 30 days inclusive), with both prices changing every time, occupied approximately 33 MB across eight history groups. This is a fixture measurement, not a promise about future catalog churn or actual storage. Large value sizes are checked before upload; history is never silently truncated.
 
 
-## Mythical trades
+## Trade offers
 
-`/trades` is a manually refreshed, read-only viewer. It discovers all current Mythicals from the public catalog and searches them in descending saved 7-day median order, with stale/missing prices last. Each browser holds its own list and scan progress; opening a page or another visitor's refresh never starts a scan in your browser.
+`/trades` is a manually refreshed, read-only viewer with separate Mythical and Legendary tabs. It discovers all current Mythicals and the current wiki top-1,000 Legendaries from the public catalog, and searches the selected rarity in descending saved 7-day median order, with stale/missing prices last. Each browser holds its own list and scan progress; opening a page or another visitor's refresh never starts a scan in your browser.
 
 A single named SQLite-backed Durable Object coordinates the whole site. It starts at most ten offer searches per second, with at most three concurrent upstream requests, deduplicates in-flight searches and reuses successful per-card results for fifteen seconds. Throttling pauses all new searches and slows subsequent traffic; successful requests gradually restore pacing. Each streamed batch contains at most ten cards, below the free Worker's external subrequest limit. The pending queue is bounded. Stop cancels the browser's next batches; up to ten already submitted searches may still finish and enter the shared cache.
 
 The coordinator uses ephemeral memory only: no extra KV or database writes, no scheduled scanning, no trade mutations, credentials, or user login. One scan uses approximately 21 Worker/DO batch requests plus catalog/prices; searches served by cache skip Kyara. The catalog is shared for five minutes. Cloudflare Worker and Durable Object request/duration quotas still apply. The deployed SQLite namespace is required for the free-plan-compatible coordinator, but no SQLite queries are performed.
 
 Kyara's per-character response may itself be capped at 200 offers; the UI flags responses reaching that size. Offers may be withdrawn or taken after checking. Kyara's own UI may not focus an older offer absent from its current list, even with an offer link. All exchanges remain on Kyara. No claim of complete uncapped source coverage is made.
+
+
+The Trades page has separate Mythical and Legendary tabs with independent local results, filters and sorting. Switching tabs stops an active scan and keeps collected results. Mythicals include all current Mythicals; Legendaries include only current wiki top-1,000 Legendaries. Both share the existing global request pacing and cache. The Mythical checkbox matches actual requested Legendaries. The Legendary checkbox matches requested Epics OR any requested card outside the tracked top 1,000; outside cards get an explicit label, not invented prices or rarity changes. Qualifying requested cards have gold (Mythical tab) or purple (Legendary tab) outlines while the checkbox is enabled. Only a manual refresh searches the selected tab.

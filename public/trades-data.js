@@ -14,13 +14,16 @@ export function compareTradeRows(a, b, mode) {
   if (y === null) return -1;
   return mode === 'median-asc' ? x - y : y - x;
 }
-export function searchOrder(cards, prices) {
-  return cards.filter(c => c.rarity === 'M').sort((a, b) => {
+export function searchOrder(cards, prices, rarity = 'M') {
+  return cards.filter(c => c.rarity === rarity && (rarity !== 'L' || Number.isSafeInteger(c.rank) && c.rank >= 1 && c.rank <= 1000)).sort((a, b) => {
     const pa = prices.get(a.id), pb = prices.get(b.id);
     const va = !pa?.stale && priceKnown(pa?.median7d) ? pa.median7d : -1;
     const vb = !pb?.stale && priceKnown(pb?.median7d) ? pb.median7d : -1;
     return vb - va || (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.id - b.id;
   });
+}
+export function matchesRequestedCard(card, rarity, trackedIds) {
+  return rarity === 'M' ? card.rarity === 'L' : card.rarity === 'E' || !trackedIds.has(card.id);
 }
 export async function readEvents(response, onEvent) {
   if (!response.body) throw new Error('Streaming response unavailable.');
