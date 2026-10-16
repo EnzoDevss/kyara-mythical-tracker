@@ -43,7 +43,7 @@ function render() {
       const meta = node('div', undefined, 'trade-meta');
       const details = node('p'); details.append(node('span', 'By ' + offer.user.pseudo), node('br'), node('span', 'Checked ' + clock.format(result.checkedAt) + (result.cached ? ' · cached' : '') + (state.running && !state.searched.has(card.id) ? ' · previous scan' : '') + ' · expires ' + date.format(new Date(offer.expiresAt))));
       const open = node('a', 'Open Kyara ↗', 'trade-open');
-      open.href = 'https://kyara.games/marche?onglet=offres&offre=' + encodeURIComponent(offer.id); open.target = '_blank'; open.rel = 'noopener noreferrer';
+      open.href = 'https://kyara.games/marche?onglet=offres&offre=' + encodeURIComponent(offer.id) + '&trackerCard=' + card.id; open.target = '_blank'; open.rel = 'noopener noreferrer';
       meta.append(details, open); article.append(main, meta); fragment.append(article);
     }
   }

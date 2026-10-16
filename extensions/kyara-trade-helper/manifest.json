@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Kyara Market — Older Trade Helper",
+  "version": "1.0.0",
+  "description": "Loads a character's public offers in Kyara when opening a marked link from Kyara Market. All trade actions remain manual.",
+  "minimum_chrome_version": "111",
+  "content_scripts": [{
+    "matches": ["https://kyara.games/marche*"],
+    "js": ["helper.js"],
+    "css": ["helper.css"],
+    "run_at": "document_start",
+    "world": "MAIN"
+  }]
+}
