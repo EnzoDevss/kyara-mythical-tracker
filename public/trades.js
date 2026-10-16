@@ -158,6 +158,9 @@ async function init() {
       tab.order = searchOrder(catalog.cards.filter(c => key === 'M' || trackedIds.has(c.id)), prices, key);
       tab.message = 'Ready. Press Refresh trades to start your own scan.';
     }
+    state.query = $('trade-search').value;
+    state.sort = $('trade-sort').value;
+    state.requestedFilter = $('trade-legendary').checked;
     updateTab();
   } catch (error) { $('scan-badge').textContent = 'Unavailable'; progress(error.message); }
 }
