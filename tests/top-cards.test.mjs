@@ -45,7 +45,7 @@ test('all-rarity booster labels use both for dual or absent membership without c
     {id:2,name:'M2',rarity:'M',median7d:200,boosters:['husbando']},
     {id:3,name:'L',rarity:'L',median7d:99999,boosters:['waifu']} ] };
   const before = comparePools(data);
-  for (const [boosters,expected] of [[['waifu'],'Waifu'],[['husbando'],'Husbando'],[['waifu','husbando'],'Both'],[[],'Both']]) {
+  for (const [boosters,expected] of [[['waifu'],'Waifu'],[['husbando'],'Husbando'],[['waifu','husbando'],'Shōnen Mix'],[[],'Shōnen Mix']]) {
     assert.equal(boosterLabel(cardBoosters({id:3,boosters},data)),expected);
   }
   assert.deepEqual(cardBoosters({id:3,boosters:[]},data),['waifu','husbando']);

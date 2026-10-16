@@ -1,4 +1,6 @@
 import { historyResponse, changesResponse } from './history.mjs';
+import { tradesResponse } from './trades.mjs';
+export { TradesCoordinator } from './trades.mjs';
 // This Worker only serves stored public data. It cannot collect, buy, or open cards.
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -25,6 +27,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    if (url.pathname.startsWith('/api/trades/')) return tradesResponse(request, env);
     if (url.pathname === '/api/history') return historyResponse(request, env);
     if (url.pathname === '/api/changes') return changesResponse(request, env);
     if (url.pathname !== '/api/prices') return error('Unknown endpoint.', 404);
