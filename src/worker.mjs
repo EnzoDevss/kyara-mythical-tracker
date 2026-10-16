@@ -1,6 +1,9 @@
 import { historyResponse, changesResponse } from './history.mjs';
 import { tradesResponse } from './trades.mjs';
+import { authenticated, authResponse, PRIVATE_HEADERS, privateJSON } from './auth.mjs';
+import tradesPage from './trades-page.mjs';
 export { TradesCoordinator } from './trades.mjs';
+export { TradesLoginLimiter } from './auth.mjs';
 // This Worker only serves stored public data. It cannot collect, buy, or open cards.
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -26,8 +29,22 @@ export function validSnapshotShape(data) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    let path;
+    try { path = decodeURIComponent(url.pathname).replace(/\/+/g, '/').replace(/\/$/, '') || '/'; }
+    catch { return error('Invalid path.', 400); }
+    if (path === '/trades' || path === '/trades.html' || path.startsWith('/api/auth/')) {
+      const response = await authResponse(request, env, path);
+      if (response) return response;
+      return new Response(request.method === 'HEAD' ? null : tradesPage, { headers: { ...PRIVATE_HEADERS, 'Content-Type': 'text/html; charset=utf-8' } });
+    }
+    if (path === '/api/trades' || path.startsWith('/api/trades/')) {
+      if (!await authenticated(request, env)) return privateJSON('Unlock Trades to access trade offers.', 401);
+      const response = await tradesResponse(request, env);
+      const protectedResponse = new Response(response.body, response);
+      for (const [name, value] of Object.entries(PRIVATE_HEADERS)) protectedResponse.headers.set(name, value);
+      return protectedResponse;
+    }
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
-    if (url.pathname.startsWith('/api/trades/')) return tradesResponse(request, env);
     if (url.pathname === '/api/history') return historyResponse(request, env);
     if (url.pathname === '/api/changes') return changesResponse(request, env);
     if (url.pathname !== '/api/prices') return error('Unknown endpoint.', 404);

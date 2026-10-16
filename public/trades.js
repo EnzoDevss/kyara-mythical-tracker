@@ -103,6 +103,7 @@ async function scan() {
         const timeout = setTimeout(() => state.controller?.abort(), 90000);
         try {
           const response = await fetch('/api/trades/batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: remaining }), signal, cache: 'no-store' });
+          if (response.status === 401) { location.replace('/trades'); return; }
           if (!response.ok) {
             const error = await response.json().catch(() => ({}));
             if (response.status === 429) pause = Math.max(1000, error.retryAfter || Number(response.headers.get('retry-after')) * 1000 || 10000);
@@ -149,6 +150,7 @@ async function scan() {
 async function init() {
   try {
     const [catalogResponse, pricesResponse] = await Promise.all([fetch('/api/trades/catalog', { cache: 'no-store' }), fetch('/api/prices', { cache: 'no-store' })]);
+    if (catalogResponse.status === 401) { location.replace('/trades'); return; }
     if (!catalogResponse.ok || !pricesResponse.ok) throw new Error('Could not load cards and saved prices. Reload to try again.');
     const [catalog, snapshot] = await Promise.all([catalogResponse.json(), pricesResponse.json()]);
     const cards = new Map(catalog.cards.map(c => [c.id, c])), prices = new Map(snapshot.cards.map(c => [c.id, c]));

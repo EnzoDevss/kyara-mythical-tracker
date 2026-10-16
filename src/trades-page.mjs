@@ -1,4 +1,5 @@
-<!doctype html>
+// Private page: served only after server-side authentication.
+export default `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -13,7 +14,8 @@
   <link rel="icon" type="image/png" href="/icons/app-192.png">
   <link rel="stylesheet" href="/install.css?v=banner-1">
   <script src="/install.js?v=banner-1" defer></script>
-  <script type="module" src="/trades.js?v=tabs-1"></script>
+  <script type="module" src="/trades.js?v=auth-1"></script>
+  <link rel="stylesheet" href="/auth.css?v=1">
 </head>
 <body>
   <a class="skip-link" href="#trade-results">Skip to trade offers</a>
@@ -23,6 +25,7 @@
       <nav class="page-nav" aria-label="Main navigation"><a href="/">Market</a><a href="/history">Price history</a><a href="/trades" aria-current="page">Trades</a></nav>
     </header>
     <main>
+      <form class="trade-lock" method="post" action="/api/auth/logout"><button class="button button-outline" type="submit">Lock Trades</button></form>
       <section class="trade-intro">
         <p class="eyebrow" id="trade-eyebrow">THE MYTHICAL TRADE BOARD</p>
         <h1>Find your<br><span>next exchange.</span></h1>
@@ -55,3 +58,4 @@
   </div>
 </body>
 </html>
+`;
