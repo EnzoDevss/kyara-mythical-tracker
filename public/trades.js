@@ -27,6 +27,7 @@ function render() {
       if (Date.parse(offer.expiresAt) <= now || seen.has(offer.id)) continue;
       seen.add(offer.id);
       const wanted = offer.wantIds.map(id => state.cards.get(id) || { id, name: 'Card #' + id, series: '' });
+      if ($('trade-legendary').checked && !wanted.some(card => card.rarity === 'L')) continue;
       const searchable = [card.name, card.series, offer.user.pseudo, ...wanted.flatMap(c => [c.name, c.series])].join(' ').toLocaleLowerCase();
       if (query && !searchable.includes(query)) continue;
       rows.push({ card, result, offer, wanted, metrics: tradeMetrics(offer, state.prices) });
@@ -155,6 +156,7 @@ $('scan-start').addEventListener('click', scan);
 $('scan-stop').addEventListener('click', () => state.controller?.abort());
 $('trade-search').addEventListener('input', () => { state.limit = 60; render(); });
 $('trade-sort').addEventListener('change', () => { state.limit = 60; render(); });
+$('trade-legendary').addEventListener('change', () => { state.limit = 60; render(); });
 $('trade-more').addEventListener('click', () => { state.limit += 60; render(); });
 window.addEventListener('pagehide', () => state.controller?.abort());
 init();
