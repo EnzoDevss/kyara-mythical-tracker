@@ -1,4 +1,4 @@
-import { priceKnown, searchOrder, readEvents } from './trades-data.js?v=1';
+import { priceKnown, searchOrder, readEvents, tradeMetrics, compareTradeRows } from './trades-data.js?v=sort-1';
 const $ = id => document.getElementById(id);
 const state = { cards: new Map(), prices: new Map(), order: [], results: new Map(), failures: new Map(), searched: new Set(), running: false, controller: null, limit: 60, token: 0, renderTimer: null };
 const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
@@ -19,6 +19,7 @@ function scheduleRender() { if (!state.renderTimer) state.renderTimer = setTimeo
 function render() {
   const query = $('trade-search').value.trim().toLocaleLowerCase(), now = Date.now();
   const fragment = document.createDocumentFragment(); let total = 0, shown = 0;
+  const rows = [];
   const seen = new Set();
   for (const card of state.order) {
     const result = state.results.get(card.id); if (!result) continue;
@@ -28,7 +29,13 @@ function render() {
       const wanted = offer.wantIds.map(id => state.cards.get(id) || { id, name: 'Card #' + id, series: '' });
       const searchable = [card.name, card.series, offer.user.pseudo, ...wanted.flatMap(c => [c.name, c.series])].join(' ').toLocaleLowerCase();
       if (query && !searchable.includes(query)) continue;
-      total++; if (shown >= state.limit) continue; shown++;
+      rows.push({ card, result, offer, wanted, metrics: tradeMetrics(offer, state.prices) });
+    }
+  }
+  rows.sort((a, b) => compareTradeRows(a, b, $('trade-sort').value));
+  total = rows.length;
+  for (const { card, result, offer, wanted, metrics } of rows.slice(0, state.limit)) {
+      shown++;
       const article = node('article', undefined, 'trade-offer');
       const main = node('div', undefined, 'trade-offer-main');
       const given = node('div', undefined, 'trade-offered');
@@ -40,12 +47,17 @@ function render() {
       }
       if (!wanted.length) choices.append(node('span', 'No requested cards listed.'));
       request.append(choices); main.append(given, node('div', '⇄', 'trade-arrow'), request);
+      const comparison = node('p', undefined, 'trade-comparison');
+      if (metrics.gain !== null) {
+        const signed = value => (value > 0 ? '+' : '') + number.format(value);
+        comparison.classList.add(metrics.gain > 0 ? 'positive' : metrics.gain < 0 ? 'negative' : 'neutral');
+        comparison.textContent = `Potential gain: ${signed(metrics.gain)} ◆ · ${metrics.percent === null ? 'percentage unavailable (zero requested median)' : signed(metrics.percent) + '%'} · vs cheapest requested card (${number.format(metrics.lowest)} ◆)`;
+      } else comparison.textContent = 'Potential gain unavailable · missing or stale prices.';
       const meta = node('div', undefined, 'trade-meta');
       const details = node('p'); details.append(node('span', 'By ' + offer.user.pseudo), node('br'), node('span', 'Checked ' + clock.format(result.checkedAt) + (result.cached ? ' · cached' : '') + (state.running && !state.searched.has(card.id) ? ' · previous scan' : '') + ' · expires ' + date.format(new Date(offer.expiresAt))));
       const open = node('a', 'Open Kyara ↗', 'trade-open');
       open.href = 'https://kyara.games/marche?onglet=offres&offre=' + encodeURIComponent(offer.id) + '&trackerCard=' + card.id; open.target = '_blank'; open.rel = 'noopener noreferrer';
-      meta.append(details, open); article.append(main, meta); fragment.append(article);
-    }
+      meta.append(details, open); article.append(main, comparison, meta); fragment.append(article);
   }
   $('trade-offers').replaceChildren(fragment);
   $('trade-count').textContent = number.format(total) + ' offers' + (total > shown ? ' · ' + shown + ' shown' : '');
@@ -142,6 +154,7 @@ async function init() {
 $('scan-start').addEventListener('click', scan);
 $('scan-stop').addEventListener('click', () => state.controller?.abort());
 $('trade-search').addEventListener('input', () => { state.limit = 60; render(); });
+$('trade-sort').addEventListener('change', () => { state.limit = 60; render(); });
 $('trade-more').addEventListener('click', () => { state.limit += 60; render(); });
 window.addEventListener('pagehide', () => state.controller?.abort());
 init();

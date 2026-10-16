@@ -1,4 +1,19 @@
 export const priceKnown = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+export function tradeMetrics(offer, prices) {
+  const value = id => { const card = prices.get(id); return !card?.stale && priceKnown(card?.median7d) ? card.median7d : null; };
+  const median = value(offer.characterId), requested = offer.wantIds.map(value);
+  const lowest = requested.length && requested.every(v => v !== null) ? Math.min(...requested) : null;
+  const gain = median !== null && lowest !== null ? median - lowest : null;
+  return { median, lowest, gain, percent: gain !== null && lowest > 0 ? gain / lowest * 100 : null };
+}
+export function compareTradeRows(a, b, mode) {
+  const key = mode === 'gain-desc' ? 'gain' : mode === 'percent-desc' ? 'percent' : 'median';
+  const x = a.metrics[key], y = b.metrics[key];
+  if (x === null && y === null) return 0;
+  if (x === null) return 1;
+  if (y === null) return -1;
+  return mode === 'median-asc' ? x - y : y - x;
+}
 export function searchOrder(cards, prices) {
   return cards.filter(c => c.rarity === 'M').sort((a, b) => {
     const pa = prices.get(a.id), pb = prices.get(b.id);
