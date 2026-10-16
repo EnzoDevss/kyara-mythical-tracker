@@ -44,7 +44,9 @@ function render() {
       const request = node('div', undefined, 'trade-wanted'); request.append(node('p', 'IN RETURN FOR ONE OF', 'eyebrow'));
       const choices = node('div', undefined, 'wanted-list');
       for (const c of wanted) {
-        const choice = node('div', undefined, 'wanted-card'); choice.append(cardLink(c), node('span', money(c.id))); choices.append(choice);
+        const choice = node('div', undefined, 'wanted-card');
+        if ($('trade-legendary').checked && c.rarity === 'L') choice.classList.add('wanted-legendary');
+        choice.append(cardLink(c), node('span', money(c.id))); choices.append(choice);
       }
       if (!wanted.length) choices.append(node('span', 'No requested cards listed.'));
       request.append(choices); main.append(given, node('div', '⇄', 'trade-arrow'), request);
