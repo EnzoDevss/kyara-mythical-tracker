@@ -9,12 +9,12 @@ export default `<!doctype html>
   <meta name="description" content="Find public Mythical and Legendary trade offers, searched from highest market median to lowest.">
   <link rel="stylesheet" href="/styles.css?v=columns-3">
   <link rel="stylesheet" href="/history.css?v=hourly-1">
-  <link rel="stylesheet" href="/trades.css?v=owned-1">
+  <link rel="stylesheet" href="/trades.css?v=owned-2">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/png" href="/icons/app-192.png">
   <link rel="stylesheet" href="/install.css?v=banner-1">
   <script src="/install.js?v=banner-1" defer></script>
-  <script type="module" src="/trades.js?v=owned-1"></script>
+  <script type="module" src="/trades.js?v=owned-2"></script>
   <link rel="stylesheet" href="/auth.css?v=1">
 </head>
 <body>
@@ -47,7 +47,7 @@ export default `<!doctype html>
         <div class="trade-checkboxes"><label class="trade-legendary-filter"><input type="checkbox" id="trade-legendary"> <span id="trade-request-filter-label">Requests at least one Legendary</span></label><label class="trade-legendary-filter"><input type="checkbox" id="trade-owned"> <span>Trades I can accept</span></label></div>
         <details class="owned-card-picker" id="owned-card-picker">
           <summary><span>Card I own</span><span id="owned-card-count">0 selected</span></summary>
-          <div class="owned-card-controls"><label class="trade-search-label" for="owned-card-search">Search the wiki top 1,000</label><input type="search" id="owned-card-search" placeholder="Search character, series, or wiki rank…" autocomplete="off"><div class="owned-card-toolbar"><span id="owned-card-results" role="status">Loading the wiki top 1,000…</span><button class="button button-outline" id="owned-card-clear" type="button" disabled>Clear selection</button></div></div>
+          <div class="owned-card-controls"><label class="trade-search-label" for="owned-card-search">Search the wiki top 1,000</label><div class="owned-card-searchbox"><span id="owned-card-chips"></span><input type="search" id="owned-card-search" placeholder="Search character, series, or wiki rank…" autocomplete="off"></div><div class="owned-card-toolbar"><span id="owned-card-results" role="status">Loading the wiki top 1,000…</span><button class="button button-outline" id="owned-card-clear" type="button" disabled>Clear selection</button></div></div>
           <div id="owned-card-list" class="owned-card-list" role="group" aria-label="Cards you own, in wiki order"></div><p id="owned-card-empty" class="owned-card-empty" hidden>No cards match your search.</p>
           <p id="owned-card-note" class="trade-note">Saved only in this browser. Select the cards you own.</p>
         </details>

@@ -26,6 +26,14 @@ function updateOwnedSummary() {
   $('owned-card-count').textContent = number.format(ownedIds.size) + ' selected';
   $('owned-card-clear').disabled = !ownedIds.size;
   $('owned-card-note').textContent = (ownedCanSave ? 'Saved only in this browser.' : 'Saving is blocked in this browser; selections last only until you leave this page.') + ' Select the cards you own. Kyara checks available copies when you accept a trade.';
+  const chips = document.createDocumentFragment();
+  for (const id of ownedIds) {
+    const card = state.cards.get(id) || state.prices.get(id), name = card?.name || 'Card #' + id;
+    const chip = node('span', undefined, 'owned-selection-chip'), remove = node('button', '×');
+    remove.type = 'button'; remove.dataset.cardId = id; remove.setAttribute('aria-label', 'Remove ' + name);
+    chip.append(node('span', name), remove); chips.append(chip);
+  }
+  $('owned-card-chips').replaceChildren(chips);
 }
 function saveOwnedSelection() {
   try { localStorage.setItem(OWNED_CARDS_KEY, JSON.stringify([...ownedIds])); ownedCanSave = true; }
@@ -192,6 +200,7 @@ async function init() {
       tab.order = searchOrder(catalog.cards.filter(c => key === 'M' || trackedIds.has(c.id)), prices, key);
       tab.message = 'Ready. Press Refresh trades to start your own scan.';
     }
+    updateOwnedSummary();
     state.query = $('trade-search').value;
     state.sort = $('trade-sort').value;
     state.requestedFilter = $('trade-legendary').checked;
@@ -243,6 +252,15 @@ $('trade-legendary').addEventListener('change', () => { state.limit = 60; render
 $('trade-owned').addEventListener('change', () => { state.limit = 60; render(); });
 $('owned-card-picker').addEventListener('toggle', () => { if ($('owned-card-picker').open) renderOwnedList(); });
 $('owned-card-search').addEventListener('input', renderOwnedList);
+$('owned-card-chips').addEventListener('click', event => {
+  const button = event.target.closest('button[data-card-id]');
+  if (!button) return;
+  const id = Number(button.dataset.cardId);
+  ownedIds.delete(id);
+  const checkbox = $('owned-card-list').querySelector('input[data-card-id="' + id + '"]');
+  if (checkbox) checkbox.checked = false;
+  saveOwnedSelection(); $('owned-card-search').focus({ preventScroll: true });
+});
 $('owned-card-list').addEventListener('change', event => {
   const checkbox = event.target;
   if (!checkbox.matches('input[data-card-id]')) return;
