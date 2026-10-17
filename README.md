@@ -109,6 +109,10 @@ Kyara's per-character response may itself be capped at 200 offers; the UI flags 
 
 The Trades page has separate Mythical and Legendary tabs with independent local results, filters and sorting. Switching tabs stops an active scan and keeps collected results. Mythicals include all current Mythicals; Legendaries include only current wiki top-1,000 Legendaries. Both share the existing global request pacing and cache. The Mythical checkbox matches actual requested Legendaries. The Legendary checkbox matches requested Epics OR any requested card outside the tracked top 1,000; outside cards get an explicit label, not invented prices or rarity changes. Qualifying requested cards have gold (Mythical tab) or purple (Legendary tab) outlines while the checkbox is enabled. Only a manual refresh searches the selected tab.
 
+## Local card selection
+
+The trade board's “Card I own” checklist uses the current tracked top 1,000 in wiki order, with character/series/rank search and multiple selections. Only card IDs are saved in this browser's localStorage (`kyara:owned-card-ids:v1`); they are never submitted to the server. Selections are shared between this browser's Mythical/Legendary tabs and survive reloads, including stable IDs that later leave the top 1,000. “Trades I can accept” keeps an offer when at least one requested card is selected and combines with the existing requested-rarity and text filters. It does not check Kyara availability or change price/gain calculations. No additional API requests or Kyara login are needed. Other visitors maintain their own browser selections; clearing site data removes them.
+
 ## Trades access
 
 Market, Price history and their price/history APIs remain public. The Trades navigation link is always visible. The Worker serves a password form for `/trades` and `/trades.html` until a signed session is present, and rejects every unauthenticated `/api/trades/*` call. Trades HTML lives in `src/trades-page.mjs`, outside public assets, so asset URL aliases cannot expose it. API and Trades paths run through the Worker first; public static assets keep their normal fast serving path. Version preview URLs are disabled.

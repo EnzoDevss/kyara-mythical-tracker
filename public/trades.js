@@ -1,8 +1,11 @@
 import { priceKnown, searchOrder, readEvents, tradeMetrics, compareTradeRows, matchesRequestedCard } from './trades-data.js?v=tabs-1';
+import { OWNED_CARDS_KEY, parseOwnedCards, ownedCardChoices, searchOwnedCards, matchesOwnedCards } from './owned-cards.js?v=1';
 const $ = id => document.getElementById(id);
 const createState = () => ({ cards: new Map(), prices: new Map(), order: [], results: new Map(), failures: new Map(), searched: new Set(), running: false, controller: null, limit: 60, token: 0, renderTimer: null, trackedIds: new Set(), snapshotAt: '', query: '', sort: 'median-desc', requestedFilter: false, message: 'Preparing the search list…', badge: 'Ready to search', badgeClass: 'status-pill pending' });
 const tabStates = { M: createState(), L: createState() };
 let rarity = 'M', state = tabStates.M, scanTask = null, switching = false;
+let ownedIds = new Set(), ownedChoices = [], ownedListReady = false, ownedCanSave = true;
+try { ownedIds = parseOwnedCards(localStorage.getItem(OWNED_CARDS_KEY)); } catch { ownedCanSave = false; }
 const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const date = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -19,6 +22,30 @@ function progress(text) {
   $('scan-progress').value = state.searched.size;
 }
 function scheduleRender() { if (!state.renderTimer) state.renderTimer = setTimeout(() => { state.renderTimer = null; render(); }, 70); }
+function updateOwnedSummary() {
+  $('owned-card-count').textContent = number.format(ownedIds.size) + ' selected';
+  $('owned-card-clear').disabled = !ownedIds.size;
+  $('owned-card-note').textContent = (ownedCanSave ? 'Saved only in this browser.' : 'Saving is blocked in this browser; selections last only until you leave this page.') + ' Select the cards you own. Kyara checks available copies when you accept a trade.';
+}
+function saveOwnedSelection() {
+  try { localStorage.setItem(OWNED_CARDS_KEY, JSON.stringify([...ownedIds])); ownedCanSave = true; }
+  catch { ownedCanSave = false; }
+  updateOwnedSummary(); state.limit = 60; render();
+}
+function renderOwnedList() {
+  const matches = searchOwnedCards(ownedChoices, $('owned-card-search').value), fragment = document.createDocumentFragment();
+  for (const card of matches) {
+    const label = node('label', undefined, 'owned-card-choice'), checkbox = document.createElement('input');
+    checkbox.type = 'checkbox'; checkbox.dataset.cardId = card.id; checkbox.checked = ownedIds.has(card.id);
+    const info = node('span', undefined, 'owned-card-info');
+    info.append(node('strong', card.name), node('span', card.series));
+    label.append(checkbox, node('span', '#' + String(card.rank).padStart(4, '0'), 'owned-card-rank'), info);
+    fragment.append(label);
+  }
+  $('owned-card-list').replaceChildren(fragment);
+  $('owned-card-results').textContent = ownedListReady ? number.format(matches.length) + ' of ' + number.format(ownedChoices.length) + ' cards' : 'Loading the wiki top 1,000…';
+  $('owned-card-empty').hidden = !ownedListReady || matches.length > 0;
+}
 function render() {
   const query = $('trade-search').value.trim().toLocaleLowerCase(), now = Date.now();
   const fragment = document.createDocumentFragment(); let total = 0, shown = 0;
@@ -31,6 +58,7 @@ function render() {
       seen.add(offer.id);
       const wanted = offer.wantIds.map(id => state.cards.get(id) || { id, name: 'Card #' + id, series: '' });
       if ($('trade-legendary').checked && !wanted.some(card => matchesRequestedCard(card, rarity, state.trackedIds))) continue;
+      if ($('trade-owned').checked && !matchesOwnedCards(offer, ownedIds)) continue;
       const searchable = [card.name, card.series, offer.user.pseudo, ...wanted.flatMap(c => [c.name, c.series])].join(' ').toLocaleLowerCase();
       if (query && !searchable.includes(query)) continue;
       rows.push({ card, result, offer, wanted, metrics: tradeMetrics(offer, state.prices) });
@@ -50,6 +78,7 @@ function render() {
         const choice = node('div', undefined, 'wanted-card');
         if ($('trade-legendary').checked && matchesRequestedCard(c, rarity, state.trackedIds)) choice.classList.add(rarity === 'M' ? 'wanted-legendary' : 'wanted-epic');
         choice.append(cardLink(c), node('span', money(c.id)));
+        if (ownedIds.has(c.id)) choice.append(node('span', 'You own', 'owned-card-tag'));
         if (rarity === 'L' && !state.trackedIds.has(c.id)) choice.append(node('span', 'Outside top 1,000'));
         choices.append(choice);
       }
@@ -71,7 +100,8 @@ function render() {
   $('trade-count').textContent = number.format(total) + ' offers' + (total > shown ? ' · ' + shown + ' shown' : '');
   $('trade-more').hidden = total <= shown;
   $('trade-empty').hidden = total > 0;
-  $('trade-empty').textContent = query ? 'No loaded offers match this filter.' : state.running ? 'Searching… results will appear as cards are checked.' : state.searched.size ? 'No active offers found in the cards checked.' : 'Press Refresh trades to search. Nothing runs automatically.';
+  const filtered = query || $('trade-legendary').checked || $('trade-owned').checked;
+  $('trade-empty').textContent = $('trade-owned').checked && !ownedIds.size ? 'Select cards in “Card I own” to find matching trades.' : state.running ? 'Searching… matching offers will appear as cards are checked.' : state.searched.size && filtered ? 'No loaded offers match your filters.' : state.searched.size ? 'No active offers found in the cards checked.' : 'Press Refresh trades to search. Nothing runs automatically.';
   const warnings = [];
   if (state.failures.size) warnings.push(state.failures.size + ' card searches failed. Any retained results for those cards are older; refresh to retry.');
   const capped = [...state.results.values()].filter(r => r.capped).length;
@@ -155,6 +185,8 @@ async function init() {
     const [catalog, snapshot] = await Promise.all([catalogResponse.json(), pricesResponse.json()]);
     const cards = new Map(catalog.cards.map(c => [c.id, c])), prices = new Map(snapshot.cards.map(c => [c.id, c]));
     const trackedIds = new Set(snapshot.cards.filter(c => c.inTop !== false && c.rank >= 1 && c.rank <= 1000).map(c => c.id));
+    ownedChoices = ownedCardChoices(snapshot.cards); ownedListReady = true;
+    if ($('owned-card-picker').open) renderOwnedList();
     for (const [key, tab] of Object.entries(tabStates)) {
       tab.cards = cards; tab.prices = prices; tab.trackedIds = trackedIds; tab.snapshotAt = snapshot.collectedAt;
       tab.order = searchOrder(catalog.cards.filter(c => key === 'M' || trackedIds.has(c.id)), prices, key);
@@ -208,6 +240,24 @@ $('scan-stop').addEventListener('click', () => state.controller?.abort());
 $('trade-search').addEventListener('input', () => { state.limit = 60; render(); });
 $('trade-sort').addEventListener('change', () => { state.limit = 60; render(); });
 $('trade-legendary').addEventListener('change', () => { state.limit = 60; render(); });
+$('trade-owned').addEventListener('change', () => { state.limit = 60; render(); });
+$('owned-card-picker').addEventListener('toggle', () => { if ($('owned-card-picker').open) renderOwnedList(); });
+$('owned-card-search').addEventListener('input', renderOwnedList);
+$('owned-card-list').addEventListener('change', event => {
+  const checkbox = event.target;
+  if (!checkbox.matches('input[data-card-id]')) return;
+  const id = Number(checkbox.dataset.cardId);
+  if (checkbox.checked) ownedIds.add(id); else ownedIds.delete(id);
+  saveOwnedSelection();
+});
+$('owned-card-clear').addEventListener('click', () => { ownedIds.clear(); saveOwnedSelection(); renderOwnedList(); });
+window.addEventListener('storage', event => {
+  if (event.key !== OWNED_CARDS_KEY && event.key !== null) return;
+  ownedIds = parseOwnedCards(event.newValue); updateOwnedSummary();
+  if ($('owned-card-picker').open) renderOwnedList();
+  state.limit = 60; render();
+});
 $('trade-more').addEventListener('click', () => { state.limit += 60; render(); });
 window.addEventListener('pagehide', () => state.controller?.abort());
+updateOwnedSummary();
 init();

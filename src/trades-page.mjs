@@ -9,12 +9,12 @@ export default `<!doctype html>
   <meta name="description" content="Find public Mythical and Legendary trade offers, searched from highest market median to lowest.">
   <link rel="stylesheet" href="/styles.css?v=columns-3">
   <link rel="stylesheet" href="/history.css?v=hourly-1">
-  <link rel="stylesheet" href="/trades.css?v=tabs-1">
+  <link rel="stylesheet" href="/trades.css?v=owned-1">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/png" href="/icons/app-192.png">
   <link rel="stylesheet" href="/install.css?v=banner-1">
   <script src="/install.js?v=banner-1" defer></script>
-  <script type="module" src="/trades.js?v=auth-1"></script>
+  <script type="module" src="/trades.js?v=owned-1"></script>
   <link rel="stylesheet" href="/auth.css?v=1">
 </head>
 <body>
@@ -44,7 +44,13 @@ export default `<!doctype html>
         <div class="trade-filters"><div><label class="trade-search-label" for="trade-search">Filter loaded offers</label>
         <input type="search" id="trade-search" placeholder="Search offered card, requested card, series, or player…" autocomplete="off"></div>
         <div><label class="trade-search-label" for="trade-sort">Sort loaded offers</label><select id="trade-sort"><option value="median-desc">Offered median: high to low</option><option value="median-asc">Offered median: low to high</option><option value="gain-desc">Potential gain: highest first</option><option value="percent-desc">Percentage gain: highest first</option></select></div></div>
-        <label class="trade-legendary-filter"><input type="checkbox" id="trade-legendary"> <span id="trade-request-filter-label">Requests at least one Legendary</span></label>
+        <div class="trade-checkboxes"><label class="trade-legendary-filter"><input type="checkbox" id="trade-legendary"> <span id="trade-request-filter-label">Requests at least one Legendary</span></label><label class="trade-legendary-filter"><input type="checkbox" id="trade-owned"> <span>Trades I can accept</span></label></div>
+        <details class="owned-card-picker" id="owned-card-picker">
+          <summary><span>Card I own</span><span id="owned-card-count">0 selected</span></summary>
+          <div class="owned-card-controls"><label class="trade-search-label" for="owned-card-search">Search the wiki top 1,000</label><input type="search" id="owned-card-search" placeholder="Search character, series, or wiki rank…" autocomplete="off"><div class="owned-card-toolbar"><span id="owned-card-results" role="status">Loading the wiki top 1,000…</span><button class="button button-outline" id="owned-card-clear" type="button" disabled>Clear selection</button></div></div>
+          <div id="owned-card-list" class="owned-card-list" role="group" aria-label="Cards you own, in wiki order"></div><p id="owned-card-empty" class="owned-card-empty" hidden>No cards match your search.</p>
+          <p id="owned-card-note" class="trade-note">Saved only in this browser. Select the cards you own.</p>
+        </details>
         <p class="trade-note" id="trade-epic-note" hidden>Cards outside the tracked top 1,000 also qualify for this filter and get a purple outline. Their actual rarity is unchanged, and missing prices remain unavailable.</p>
         <p class="trade-note">Each offer accepts <strong>one</strong> requested card. Potential gain = offered median minus the cheapest requested median; percentage gain uses that requested median as its base. Missing or stale prices prevent a reliable comparison and sort last. ◆ prices are saved 7-day medians, not guaranteed sale values. Kyara may not highlight older offers outside its own displayed list.</p>
         <div class="trade-empty" id="trade-empty">Press Refresh trades to search. Nothing runs automatically.</div>
