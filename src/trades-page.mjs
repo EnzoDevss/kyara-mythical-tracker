@@ -9,7 +9,7 @@ export default `<!doctype html>
   <meta name="description" content="Find public Mythical and Legendary trade offers, searched from highest market median to lowest.">
   <link rel="stylesheet" href="/styles.css?v=columns-3">
   <link rel="stylesheet" href="/history.css?v=hourly-1">
-  <link rel="stylesheet" href="/trades.css?v=owned-2">
+  <link rel="stylesheet" href="/trades.css?v=owned-3">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/png" href="/icons/app-192.png">
   <link rel="stylesheet" href="/install.css?v=banner-1">
