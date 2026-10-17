@@ -14,7 +14,7 @@ export default `<!doctype html>
   <link rel="icon" type="image/png" href="/icons/app-192.png">
   <link rel="stylesheet" href="/install.css?v=banner-1">
   <script src="/install.js?v=banner-1" defer></script>
-  <script type="module" src="/trades.js?v=owned-2"></script>
+  <script type="module" src="/trades.js?v=owned-3"></script>
   <link rel="stylesheet" href="/auth.css?v=1">
 </head>
 <body>

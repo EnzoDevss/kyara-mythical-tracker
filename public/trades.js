@@ -27,7 +27,9 @@ function updateOwnedSummary() {
   $('owned-card-clear').disabled = !ownedIds.size;
   $('owned-card-note').textContent = (ownedCanSave ? 'Saved only in this browser.' : 'Saving is blocked in this browser; selections last only until you leave this page.') + ' Select the cards you own. Kyara checks available copies when you accept a trade.';
   const chips = document.createDocumentFragment();
-  for (const id of ownedIds) {
+  const wikiRank = id => state.prices.get(id)?.rank ?? state.cards.get(id)?.rank ?? Infinity;
+  // Sort a display copy; keep every saved selection, including cards outside the current top 1,000.
+  for (const id of [...ownedIds].sort((a, b) => wikiRank(a) - wikiRank(b) || a - b)) {
     const card = state.cards.get(id) || state.prices.get(id), name = card?.name || 'Card #' + id;
     const chip = node('span', undefined, 'owned-selection-chip'), remove = node('button', '×');
     remove.type = 'button'; remove.dataset.cardId = id; remove.setAttribute('aria-label', 'Remove ' + name);
