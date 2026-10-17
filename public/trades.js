@@ -86,7 +86,9 @@ function render() {
       const choices = node('div', undefined, 'wanted-list');
       for (const c of wanted) {
         const choice = node('div', undefined, 'wanted-card');
-        if ($('trade-legendary').checked && matchesRequestedCard(c, rarity, state.trackedIds)) choice.classList.add(rarity === 'M' ? 'wanted-legendary' : 'wanted-epic');
+        const outline = { M: 'wanted-mythical', L: 'wanted-legendary', E: 'wanted-epic' }[c.rarity]
+          || (rarity === 'L' && !state.trackedIds.has(c.id) ? 'wanted-epic' : null);
+        if (outline) choice.classList.add(outline);
         choice.append(cardLink(c), node('span', money(c.id)));
         if (ownedIds.has(c.id)) choice.append(node('span', 'You own', 'owned-card-tag'));
         if (rarity === 'L' && !state.trackedIds.has(c.id)) choice.append(node('span', 'Outside top 1,000'));
