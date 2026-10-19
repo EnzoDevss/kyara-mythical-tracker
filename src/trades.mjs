@@ -1,3 +1,4 @@
+import { cleanRooms, cleanCounterPage } from './counter.mjs';
 const SOURCE = 'https://kyara.games/api/';
 const TTL = 15000;
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers } });
@@ -30,6 +31,7 @@ export class TradesCoordinator {
     this.now = dependencies.now || Date.now;
     this.sleep = dependencies.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
     this.cache = new Map(); this.inflight = new Map(); this.queue = [];
+    this.counterCache = new Map(); this.counterInflight = new Map();
     this.interval = 100; this.nextStart = 0; this.blockedUntil = 0; this.active = 0; this.pumping = false; this.successes = 0;
     this.catalog = null; this.catalogAt = 0; this.catalogLoading = null;
   }
@@ -60,11 +62,61 @@ export class TradesCoordinator {
     if (this.now() < this.blockedUntil) return Promise.reject(problem('Kyara requested a pause.', this.blockedUntil - this.now()));
     if (this.queue.length >= 60) return Promise.reject(problem('Other searches are running. Please wait.', 3000));
     // The scheduler grants slots; each caller performs its own bounded upstream request.
-    const work = new Promise((resolve, reject) => this.queue.push({ resolve, reject }))
-      .then(() => this.run({ id, catalog }).finally(() => { this.active--; }));
+    const work = this.schedule(() => this.run({ id, catalog }));
     const promise = work.finally(() => this.inflight.delete(id));
     this.inflight.set(id, promise); this.pump();
     return promise;
+  }
+  schedule(task) {
+    if (this.now() < this.blockedUntil) return Promise.reject(problem('Kyara requested a pause.', this.blockedUntil - this.now()));
+    if (this.queue.length >= 60) return Promise.reject(problem('Other searches are running. Please wait.', 3000));
+    const work = new Promise((resolve, reject) => this.queue.push({ resolve, reject }))
+      .then(() => task().finally(() => { this.active--; }));
+    this.pump(); return work;
+  }
+  counterRead(key, load) {
+    const saved = this.counterCache.get(key);
+    if (saved && this.now() - saved.checkedAt < TTL) return Promise.resolve({ ...saved, cached: true });
+    if (this.counterInflight.has(key)) return this.counterInflight.get(key);
+    const work = this.schedule(async () => {
+      try {
+        const response = await this.request(SOURCE + key, { signal: AbortSignal.timeout(12000), redirect: 'manual' });
+        if (response.status === 429 || response.status === 403) {
+          const pause = response.status === 429 ? retryDelay(response.headers, this.now()) : 60000;
+          this.blockedUntil = Math.max(this.blockedUntil, this.now() + pause);
+          this.interval = Math.min(2000, Math.max(200, this.interval * 2)); this.successes = 0;
+          throw problem('Kyara requested a pause.', pause);
+        }
+        if (!response.ok) throw problem('Counter temporarily unavailable (HTTP ' + response.status + ').');
+        const value = { ...load(await response.json(), this.now()), checkedAt: this.now(), cached: false };
+        if (this.counterCache.size >= 512) this.counterCache.delete(this.counterCache.keys().next().value);
+        this.counterCache.set(key, value);
+        if (++this.successes >= 30) { this.interval = Math.max(100, this.interval * 0.9); this.successes = 0; }
+        const remaining = Number(response.headers.get('x-ratelimit-remaining'));
+        if (response.headers.has('x-ratelimit-remaining') && remaining < 50) this.blockedUntil = Math.max(this.blockedUntil, this.now() + retryDelay(response.headers, this.now()));
+        return value;
+      } catch (error) {
+        if (!error.retryAfter) { this.interval = Math.min(2000, Math.max(200, this.interval * 1.25)); this.successes = 0; }
+        throw error;
+      }
+    });
+    const promise = work.finally(() => this.counterInflight.delete(key));
+    this.counterInflight.set(key, promise); return promise;
+  }
+  counterRooms() { return this.counterRead('market/chat/rooms', raw => ({ rooms: cleanRooms(raw) })); }
+  async counterResponse(url) {
+    try {
+      if (url.pathname.endsWith('/rooms')) return json(await this.counterRooms());
+      const keys = [...url.searchParams.keys()];
+      const room = Number(url.searchParams.get('room')), before = url.searchParams.get('before');
+      if (keys.some(k => !['room','before'].includes(k)) || new Set(keys).size !== keys.length || !Number.isSafeInteger(room) || room <= 0 || before !== null && !/^[\w-]{1,80}$/.test(before)) return json({ error: 'Invalid counter page.' }, 400);
+      const rooms = await this.counterRooms();
+      if (!rooms.rooms.includes(room)) return json({ error: 'This room is no longer listed. Refresh to discover current rooms.' }, 400);
+      const query = new URLSearchParams({ room: String(room), limit: '50', ...(before ? { before } : {}) });
+      return json(await this.counterRead('market/chat?' + query, (raw, now) => cleanCounterPage(raw, room, now)));
+    } catch (error) {
+      return json({ error: error.retryAfter ? error.message : 'Counter messages are temporarily unavailable. Retry the refresh.', retryAfter: error.retryAfter || 0 }, error.retryAfter ? 429 : 503);
+    }
   }
   async pump() {
     if (this.pumping) return;
@@ -111,7 +163,11 @@ export class TradesCoordinator {
     }
   }
   async fetch(request) {
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url), path = url.pathname;
+    if (['/api/trades/counter/rooms', '/api/trades/counter/page'].includes(path)) {
+      if (request.method !== 'GET') return json({ error: 'Read-only counter endpoint.' }, 405);
+      return this.counterResponse(url);
+    }
     if ((path !== '/api/trades/catalog' || request.method !== 'GET') && (path !== '/api/trades/batch' || request.method !== 'POST')) return json({ error: 'Unsupported trade request.' }, 405);
     try {
       let ids;

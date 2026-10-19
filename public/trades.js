@@ -1,9 +1,11 @@
 import { priceKnown, searchOrder, readEvents, tradeMetrics, compareTradeRows, matchesRequestedCard } from './trades-data.js?v=fairy-tail-1';
 import { OWNED_CARDS_KEY, parseOwnedCards, ownedCardChoices, searchOwnedCards, matchesOwnedCards } from './owned-cards.js?v=1';
+import { loadCounter } from './counter-data.js?v=counter-1';
+import { renderCounter } from './counter.js?v=counter-1';
 const $ = id => document.getElementById(id);
 const createState = () => ({ cards: new Map(), prices: new Map(), order: [], results: new Map(), failures: new Map(), searched: new Set(), running: false, controller: null, limit: 60, token: 0, renderTimer: null, trackedIds: new Set(), snapshotAt: '', query: '', sort: 'median-desc', offeredRarity: '', requestedFilter: false, message: 'Preparing the search list…', badge: 'Ready to search', badgeClass: 'status-pill pending' });
-const tabStates = { M: createState(), L: createState(), FT: createState() };
-const tabIds = { M: 'tab-mythical', L: 'tab-legendary', FT: 'tab-fairy-tail' };
+const tabStates = { M: createState(), L: createState(), FT: createState(), CT: { ...createState(), sort: 'newest', messages: new Map(), rooms: [], coverage: new Map(), cutoff: 0, counterType: 'posts', room: '' } };
+const tabIds = { M: 'tab-mythical', L: 'tab-legendary', FT: 'tab-fairy-tail', CT: 'tab-counter' };
 const rarityNames = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
 let rarity = 'M', state = tabStates.M, scanTask = null, switching = false;
 let ownedIds = new Set(), ownedChoices = [], ownedListReady = false, ownedCanSave = true;
@@ -59,6 +61,7 @@ function renderOwnedList() {
   $('owned-card-empty').hidden = !ownedListReady || matches.length > 0;
 }
 function render() {
+  if (rarity === 'CT') return renderCounter({ state, ownedIds, node, cardLink, money, number, date });
   const query = $('trade-search').value.trim().toLocaleLowerCase(), now = Date.now();
   const offeredRarity = rarity === 'FT' ? $('trade-rarity').value : '';
   const fragment = document.createDocumentFragment(); let total = 0, shown = 0;
@@ -193,6 +196,52 @@ async function scan() {
     render();
   }
 }
+async function scanCounter() {
+  if (state.running) return;
+  state.running = true; state.limit = 60; state.controller = new AbortController();
+  const signal = state.controller.signal;
+  $('scan-start').disabled = true; $('scan-stop').hidden = false;
+  $('scan-badge').className = 'status-pill pending'; $('scan-badge').textContent = 'Loading counter';
+  let stopped = false;
+  try {
+    progress('Discovering current counter rooms…');
+    await loadCounter({ signal,
+      onRooms(rooms, cutoff) {
+        state.messages.clear(); state.searched.clear(); state.coverage.clear(); state.rooms = rooms; state.cutoff = cutoff;
+        $('scan-progress').max = Math.max(1, rooms.length);
+        updateCounterRooms();
+        $('price-note').textContent = rooms.length + ' current rooms · messages since ' + date.format(new Date(cutoff));
+        progress('Loading the past hour across ' + rooms.length + ' rooms…'); render();
+      },
+      onPage(page) {
+        for (const message of page.items) if (Date.parse(message.createdAt) >= state.cutoff) state.messages.set(message.id, message);
+        progress(state.searched.size + ' / ' + state.rooms.length + ' rooms finished · ' + number.format(state.messages.size) + ' messages loaded'); scheduleRender();
+      },
+      onRoom(room, coverage) {
+        state.coverage.set(room, coverage); state.searched.add(room);
+        progress(state.searched.size + ' / ' + state.rooms.length + ' rooms finished · ' + number.format(state.messages.size) + ' messages loaded'); scheduleRender();
+      },
+      onPause(ms) { progress('Kyara requested a pause · retrying in ' + Math.ceil(ms / 1000) + ' seconds.'); }
+    });
+    progress(state.searched.size + ' / ' + state.rooms.length + ' rooms checked · finished ' + clock.format(Date.now()) + '. Refresh to discover current rooms and new messages.');
+  } catch (error) {
+    stopped = true;
+    if (error.unauthorized) { location.replace('/trades'); return; }
+    progress(signal.aborted ? 'Stopped. Messages loaded so far are kept.' : error.message);
+  } finally {
+    state.running = false; state.controller = null;
+    const partial = stopped || [...state.coverage.values()].some(value => ['failed','partial'].includes(value));
+    $('scan-start').disabled = false; $('scan-stop').hidden = true;
+    $('scan-badge').className = 'status-pill ' + (partial ? 'stale' : 'fresh');
+    $('scan-badge').textContent = partial ? 'Partial counter scan' : 'Counter loaded'; render();
+  }
+}
+function updateCounterRooms() {
+  const select = $('counter-room');
+  select.replaceChildren(new Option('All rooms', ''), ...state.rooms.map(room => new Option('Room ' + room, String(room))));
+  if (!state.rooms.includes(Number(state.room))) state.room = '';
+  select.value = state.room;
+}
 async function init() {
   try {
     const [catalogResponse, pricesResponse] = await Promise.all([fetch('/api/trades/catalog', { cache: 'no-store' }), fetch('/api/prices', { cache: 'no-store' })]);
@@ -205,8 +254,8 @@ async function init() {
     if ($('owned-card-picker').open) renderOwnedList();
     for (const [key, tab] of Object.entries(tabStates)) {
       tab.cards = cards; tab.prices = prices; tab.trackedIds = trackedIds; tab.snapshotAt = snapshot.collectedAt;
-      tab.order = searchOrder(catalog.cards.filter(c => key !== 'L' || trackedIds.has(c.id)), prices, key);
-      tab.message = 'Ready. Press Refresh trades to start your own scan.';
+      tab.order = key === 'CT' ? [] : searchOrder(catalog.cards.filter(c => key !== 'L' || trackedIds.has(c.id)), prices, key);
+      tab.message = key === 'CT' ? 'Ready. Press Refresh counter to load at least the past hour from current rooms.' : 'Ready. Press Refresh trades to start your own scan.';
     }
     updateOwnedSummary();
     state.query = $('trade-search').value;
@@ -216,7 +265,7 @@ async function init() {
   } catch (error) { $('scan-badge').textContent = 'Unavailable'; progress(error.message); }
 }
 function updateTab() {
-  const mythical = rarity === 'M', fairyTail = rarity === 'FT', label = fairyTail ? 'Fairy Tail' : rarityNames[rarity];
+  const mythical = rarity === 'M', fairyTail = rarity === 'FT', counter = rarity === 'CT', label = counter ? 'Counter' : fairyTail ? 'Fairy Tail' : rarityNames[rarity];
   for (const [key, id] of Object.entries(tabIds)) {
     const selected = key === rarity;
     $(id).setAttribute('aria-selected', String(selected)); $(id).tabIndex = selected ? 0 : -1;
@@ -224,20 +273,37 @@ function updateTab() {
   $('trade-panel').setAttribute('aria-labelledby', tabIds[rarity]);
   $('trade-eyebrow').textContent = 'THE ' + label.toUpperCase() + ' TRADE BOARD';
   $('trade-intro-copy').textContent = (fairyTail ? 'Search every Fairy Tail card, across all rarities and wiki ranks' : mythical ? 'Search every Mythical' : 'Search the Legendaries in the tracked wiki top 1,000') + ', from highest 7-day median to lowest. Offers appear as each card is checked. Your refresh updates only your list.';
-  $('results-title').textContent = label + ' offers';
+  if (counter) $('trade-intro-copy').textContent = 'Discover current counter rooms and load their messages from the past hour. Find people looking for your cards or offering a card you want. Results appear progressively; your filters and owned cards stay local.';
+  $('results-title').textContent = counter ? 'Counter messages' : label + ' offers';
+  $('results-eyebrow').textContent = counter ? 'POSTED IN THE PAST HOUR' : 'AVAILABLE WHEN CHECKED';
+  $('trade-search-label').textContent = counter ? 'Filter loaded messages' : 'Filter loaded offers';
+  $('trade-sort-label').textContent = counter ? 'Sort loaded messages' : 'Sort loaded offers';
+  $('trade-more').textContent = counter ? 'Show more messages' : 'Show more offers';
   $('trade-request-filter-label').textContent = mythical ? 'Requests at least one Legendary' : 'Requests at least one Epic or a card outside the top 1,000';
-  $('trade-request-filter').hidden = fairyTail;
-  $('trade-rarity-field').hidden = !fairyTail;
-  document.querySelector('.trade-filters').classList.toggle('has-rarity', fairyTail);
+  $('trade-request-filter').hidden = fairyTail || counter;
+  $('trade-rarity-field').hidden = !fairyTail && !counter;
+  $('trade-rarity-label').textContent = counter ? 'Card rarity' : 'Offered rarity';
+  document.querySelector('.trade-filters').classList.toggle('has-rarity', fairyTail || counter);
+  $('counter-filters').hidden = !counter;
+  $('trade-owned-label').textContent = counter ? 'Requests cards I own' : 'Trades I can accept';
+  $('trade-comparison-note').hidden = counter;
+  $('counter-note').hidden = !counter;
+  $('scan-explanation').textContent = counter ? 'Each refresh discovers current rooms and pages backward to the one-hour cutoff or the end of available history. Results may be reused for up to 15 seconds. Requests share pacing with trade searches and pause when needed. Nothing runs automatically.' : 'Results may be reused for up to 15 seconds. Traffic is shared at up to 10 searches/second, with automatic pauses when needed. Offers can be taken or withdrawn after checking. Complete trades on Kyara.';
+  $('scan-start').textContent = counter ? 'Refresh counter ↻' : 'Refresh trades ↻';
+  $('trade-search').placeholder = counter ? 'Search card, requested card, series, message, or player…' : 'Search offered card, requested card, series, or player…';
+  $('trade-sort').replaceChildren(...(counter ? [['newest','Newest messages first'],['oldest','Oldest messages first'],['median-desc','Card median: high to low'],['median-asc','Card median: low to high']] : [['median-desc','Offered median: high to low'],['median-asc','Offered median: low to high'],['gain-desc','Potential gain: highest first'],['percent-desc','Percentage gain: highest first']]).map(([value, text]) => new Option(text, value)));
+  if (counter) { updateCounterRooms(); $('counter-type').value = state.counterType; }
   $('trade-rarity').value = state.offeredRarity;
   $('trade-epic-note').hidden = rarity !== 'L';
-  $('scan-progress').max = Math.max(1, state.order.length);
+  $('scan-progress').max = Math.max(1, counter ? state.rooms.length : state.order.length);
   const group = fairyTail ? 'Fairy Tail cards · all rarities' : mythical ? 'Mythicals' : 'Legendaries';
   $('scan-progress').setAttribute('aria-label', group + ' searched');
+  if (counter) $('scan-progress').setAttribute('aria-label', 'Counter rooms checked');
   $('price-note').textContent = state.snapshotAt ? `${state.order.length} ${group} · order uses 7-day medians saved ${date.format(new Date(state.snapshotAt))}` : 'Loading card catalog and saved prices…';
+  if (counter) $('price-note').textContent = state.rooms.length ? state.rooms.length + ' rooms · messages since ' + date.format(new Date(state.cutoff)) : 'Current rooms are discovered when you refresh.';
   $('trade-search').value = state.query; $('trade-sort').value = state.sort; $('trade-legendary').checked = state.requestedFilter;
   $('scan-badge').textContent = state.badge; $('scan-badge').className = state.badgeClass;
-  $('scan-start').disabled = !state.order.length; $('scan-stop').hidden = true;
+  $('scan-start').disabled = counter ? !state.cards.size : !state.order.length; $('scan-stop').hidden = true;
   progress(state.message); render();
 }
 async function switchTab(next) {
@@ -245,21 +311,23 @@ async function switchTab(next) {
   switching = true;
   try {
     state.query = $('trade-search').value; state.sort = $('trade-sort').value; state.requestedFilter = $('trade-legendary').checked;
+    if (rarity === 'CT') { state.counterType = $('counter-type').value; state.room = $('counter-room').value; }
     if (state.running) { state.controller?.abort(); await scanTask; }
     state.badge = $('scan-badge').textContent; state.badgeClass = $('scan-badge').className;
     clearTimeout(state.renderTimer); state.renderTimer = null;
     rarity = next; state = tabStates[next]; updateTab();
   } finally { switching = false; }
 }
-$('scan-start').addEventListener('click', () => { if (!switching) scanTask = scan(); });
+$('scan-start').addEventListener('click', () => { if (!switching) scanTask = rarity === 'CT' ? scanCounter() : scan(); });
 $('tab-mythical').addEventListener('click', () => switchTab('M'));
 $('tab-legendary').addEventListener('click', () => switchTab('L'));
 $('tab-fairy-tail').addEventListener('click', () => switchTab('FT'));
+$('tab-counter').addEventListener('click', () => switchTab('CT'));
 for (const id of Object.values(tabIds)) $(id).addEventListener('keydown', async event => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
   event.preventDefault();
   const keys = Object.keys(tabIds), offset = event.key === 'ArrowLeft' ? -1 : 1;
-  const next = event.key === 'Home' ? 'M' : event.key === 'End' ? 'FT' : keys[(keys.indexOf(rarity) + offset + keys.length) % keys.length];
+  const next = event.key === 'Home' ? 'M' : event.key === 'End' ? 'CT' : keys[(keys.indexOf(rarity) + offset + keys.length) % keys.length];
   await switchTab(next); $(tabIds[next]).focus();
 });
 $('scan-stop').addEventListener('click', () => state.controller?.abort());
@@ -268,6 +336,7 @@ $('trade-sort').addEventListener('change', () => { state.limit = 60; render(); }
 $('trade-rarity').addEventListener('change', () => { state.offeredRarity = $('trade-rarity').value; state.limit = 60; render(); });
 $('trade-legendary').addEventListener('change', () => { state.limit = 60; render(); });
 $('trade-owned').addEventListener('change', () => { state.limit = 60; render(); });
+for (const id of ['counter-type','counter-room']) $(id).addEventListener('change', () => { state.counterType = $('counter-type').value; state.room = $('counter-room').value; state.limit = 60; render(); });
 $('owned-card-picker').addEventListener('toggle', () => { if ($('owned-card-picker').open) renderOwnedList(); });
 $('owned-card-search').addEventListener('input', renderOwnedList);
 $('owned-card-chips').addEventListener('click', event => {

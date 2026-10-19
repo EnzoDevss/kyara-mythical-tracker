@@ -48,7 +48,7 @@ test('direct Trades paths and encoded aliases only show the password form', asyn
 
 test('every Trades API is blocked before reaching the coordinator', async () => {
   const noCalls = { ...env, TRADES: { get: () => assert.fail('Unauthorized coordinator call') } };
-  for (const path of ['/api/trades/catalog', '/api/trades/batch', '/api/trades/unknown', '/api/trades', '/api%2Ftrades/catalog']) {
+  for (const path of ['/api/trades/catalog', '/api/trades/batch', '/api/trades/counter/rooms', '/api/trades/counter/page?room=1', '/api/trades/unknown', '/api/trades', '/api%2Ftrades/catalog']) {
     const response = await worker.fetch(request(path), noCalls);
     assert.equal(response.status, 401);
     assert.match(response.headers.get('cache-control'), /no-store/);
