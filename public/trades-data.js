@@ -15,7 +15,7 @@ export function compareTradeRows(a, b, mode) {
   return mode === 'median-asc' ? x - y : y - x;
 }
 export function searchOrder(cards, prices, rarity = 'M') {
-  return cards.filter(c => c.rarity === rarity && (rarity !== 'L' || Number.isSafeInteger(c.rank) && c.rank >= 1 && c.rank <= 1000)).sort((a, b) => {
+  return cards.filter(c => rarity === 'FT' ? c.series?.trim().toLowerCase() === 'fairy tail' : c.rarity === rarity && (rarity !== 'L' || Number.isSafeInteger(c.rank) && c.rank >= 1 && c.rank <= 1000)).sort((a, b) => {
     const pa = prices.get(a.id), pb = prices.get(b.id);
     const va = !pa?.stale && priceKnown(pa?.median7d) ? pa.median7d : -1;
     const vb = !pb?.stale && priceKnown(pb?.median7d) ? pb.median7d : -1;

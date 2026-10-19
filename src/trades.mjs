@@ -47,7 +47,7 @@ export class TradesCoordinator {
         .map(c => ({ id: c.id, name: c.name, series: typeof c.series === 'string' ? c.series : '', rarity: c.rarity, rank: Number.isSafeInteger(c.rank) ? c.rank + 1 : null }));
       const mythicals = new Set(cards.filter(c => c.rarity === 'M').map(c => c.id));
       if (!mythicals.size) throw problem('No Mythicals found in the catalog.');
-      const searchable = new Set(cards.filter(c => c.rarity === 'M' || c.rarity === 'L' && c.rank >= 1 && c.rank <= 1000).map(c => c.id));
+      const searchable = new Set(cards.filter(c => c.rarity === 'M' || c.rarity === 'L' && c.rank >= 1 && c.rank <= 1000 || c.series.trim().toLowerCase() === 'fairy tail').map(c => c.id));
       this.catalog = { cards, mythicals, searchable, knownIds: new Set(cards.map(c => c.id)) }; this.catalogAt = this.now();
       return this.catalog;
     })().finally(() => { this.catalogLoading = null; });
@@ -123,7 +123,7 @@ export class TradesCoordinator {
       }
       const catalog = await this.getCatalog();
       if (path.endsWith('/catalog')) return json({ cards: catalog.cards, cachedAt: this.catalogAt });
-      if (ids.some(id => !(catalog.searchable || catalog.mythicals).has(id))) return json({ error: 'Choose a Mythical or a top-1,000 Legendary.' }, 400);
+      if (ids.some(id => !(catalog.searchable || catalog.mythicals).has(id))) return json({ error: 'Choose a Mythical, a top-1,000 Legendary, or a Fairy Tail card.' }, 400);
       if (this.now() < this.blockedUntil) return json({ error: 'Kyara requested a pause.', retryAfter: this.blockedUntil - this.now() }, 429, { 'Retry-After': String(Math.ceil((this.blockedUntil - this.now()) / 1000)) });
       let cancelled = false;
       const encoder = new TextEncoder();

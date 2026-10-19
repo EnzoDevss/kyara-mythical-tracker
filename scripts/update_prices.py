@@ -233,6 +233,9 @@ def validate_snapshot(snapshot: Any) -> None:
             seen.add(card_id)
         referenced.update(seen)
     if snapshot.get("selection") == "wiki-top":
+        extra_series = snapshot.get("extraSeries", [])
+        require(isinstance(extra_series, list) and all(series == "Fairy Tail" for series in extra_series)
+                and len(extra_series) == len(set(extra_series)), "Invalid extra tracked series.")
         ranked = [card for card in cards if card.get("inTop")]
         require(type(snapshot.get("topCount")) is int and 1 <= snapshot["topCount"] <= 1000
                 and len(ranked) == snapshot["topCount"], "Top-card coverage is incomplete.")
@@ -240,7 +243,7 @@ def validate_snapshot(snapshot: Any) -> None:
                 "Wiki ranks are missing or duplicated.")
         by_id = {card["id"]: card for card in cards}
         require(all(by_id[i]["rarity"] == "M" for i in referenced), "Comparison pools must contain Mythicals only.")
-        require(all(c.get("inTop") or c["id"] in referenced for c in cards), "Unexpected unranked card.")
+        require(all(c.get("inTop") or c["id"] in referenced or c["series"].strip().lower() in {s.lower() for s in extra_series} for c in cards), "Unexpected unranked card.")
     else:
         require(referenced == card_ids, "Snapshot contains cards outside the selected pools.")
 
@@ -349,7 +352,8 @@ def collect_snapshot(client: JsonClient, now: Callable[[], str] = utc_now, *, to
         ranked = sorted(catalog.values(), key=lambda c: c.get("rank", MAX_SAFE_INTEGER))[:top_count]
         require([c.get("rank") for c in ranked] == list(range(top_count)), "Catalog wiki ranks are invalid.")
         ranked_ids = {c["id"] for c in ranked}
-        ids = sorted(set(ids) | ranked_ids)
+        fairy_tail_ids = {c["id"] for c in catalog.values() if (c.get("series") or "").strip().lower() == "fairy tail"}
+        ids = sorted(set(ids) | ranked_ids | fairy_tail_ids)
     previous_cards = {c["id"]: c for c in (previous or {}).get("cards", [])}
     stopped = threading.Event()
     failures = []
@@ -400,7 +404,7 @@ def collect_snapshot(client: JsonClient, now: Callable[[], str] = utc_now, *, to
                 "catalogUpdatedAt": catalog_updated, "collectedAt": now(), "currency": "chakra",
                 "pools": pools, "cards": cards}
     if top_count is not None:
-        snapshot.update(selection="wiki-top", topCount=top_count, failedCards=len(failures))
+        snapshot.update(selection="wiki-top", topCount=top_count, failedCards=len(failures), extraSeries=["Fairy Tail"])
     validate_snapshot(snapshot)
     return snapshot
 
@@ -614,7 +618,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", type=Path, default=Path("data/latest.json"), help="Atomic local output (default: data/latest.json).")
     parser.add_argument("--upload", action="store_true", help="Append 30-day history and publish the complete snapshot to Cloudflare KV.")
-    parser.add_argument("--top", type=int, default=None, help="Track the top N wiki-ranked cards (maximum 1000), plus comparison Mythicals.")
+    parser.add_argument("--top", type=int, default=None, help="Track the top N wiki-ranked cards (maximum 1000), plus comparison Mythicals and all Fairy Tail cards.")
     parser.add_argument("--validate-only", type=Path, metavar="PATH", help="Validate an existing snapshot without network access or writes.")
     args = parser.parse_args(argv)
     if args.validate_only is not None and args.upload:

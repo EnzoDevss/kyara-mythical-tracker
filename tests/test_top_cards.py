@@ -19,6 +19,27 @@ def catalog():
 
 
 class TopCards(unittest.TestCase):
+    def test_fairy_tail_prices_include_every_rank_and_rarity_without_duplicate_requests(self):
+        payloads = catalog()
+        payloads['/api/characters'][2]['series'] = 'Fairy Tail'
+        payloads['/api/characters'].append({'id': 4, 'name': 'Outside Fairy Tail', 'series': 'Fairy Tail', 'rarity': 'C', 'rank': 5000})
+        payloads['/api/market/prices/4'] = {**price(4, None), 'sales7d': 0, 'sales30d': 0}
+        client = FakeClient(payloads)
+        data = updater.collect_snapshot(client, now=lambda: '2026-10-19T12:00:00Z', top_count=3)
+        self.assertEqual(data['extraSeries'], ['Fairy Tail'])
+        self.assertEqual(len(data['cards']), 4)
+        self.assertEqual(len([c for c in data['cards'] if c['inTop']]), 3)
+        self.assertEqual(client.calls.count('/api/market/prices/3'), 1)
+        self.assertEqual(client.calls.count('/api/market/prices/4'), 1)
+        outside = next(c for c in data['cards'] if c['id'] == 4)
+        self.assertFalse(outside['inTop'])
+        self.assertIsNone(outside['median7d'])
+        self.assertEqual(data['pools'][0]['cardIds'], [1])
+        updater.validate_snapshot(data)
+        outside['series'] = 'Unrelated series'
+        with self.assertRaises(updater.UpdateError):
+            updater.validate_snapshot(data)
+
     def test_persistent_transport_reuses_connection_and_preserves_http_status(self):
         class Response:
             status = 200

@@ -6,15 +6,15 @@ export default `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0d0c11">
   <title>Trades · Kyara Market</title>
-  <meta name="description" content="Find public Mythical and Legendary trade offers, searched from highest market median to lowest.">
+  <meta name="description" content="Find public Mythical, Legendary and all-rarity Fairy Tail trade offers, searched from highest market median to lowest.">
   <link rel="stylesheet" href="/styles.css?v=columns-3">
   <link rel="stylesheet" href="/history.css?v=hourly-1">
-  <link rel="stylesheet" href="/trades.css?v=rarity-1">
+  <link rel="stylesheet" href="/trades.css?v=fairy-tail-1">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/png" href="/icons/app-192.png">
   <link rel="stylesheet" href="/install.css?v=banner-1">
   <script src="/install.js?v=banner-1" defer></script>
-  <script type="module" src="/trades.js?v=rarity-1"></script>
+  <script type="module" src="/trades.js?v=fairy-tail-1"></script>
   <link rel="stylesheet" href="/auth.css?v=1">
 </head>
 <body>
@@ -31,7 +31,7 @@ export default `<!doctype html>
         <h1>Find your<br><span>next exchange.</span></h1>
         <p class="hero-copy" id="trade-intro-copy">Search every Mythical, from highest 7-day median to lowest. Offers appear as each card is checked. Your refresh updates only your list.</p>
       </section>
-      <div class="trade-tabs" role="tablist" aria-label="Offered card rarity"><button type="button" role="tab" id="tab-mythical" aria-selected="true" aria-controls="trade-panel">Mythicals</button><button type="button" role="tab" id="tab-legendary" aria-selected="false" aria-controls="trade-panel" tabindex="-1">Legendaries</button></div>
+      <div class="trade-tabs" role="tablist" aria-label="Trade category"><button type="button" role="tab" id="tab-mythical" aria-selected="true" aria-controls="trade-panel">Mythicals</button><button type="button" role="tab" id="tab-legendary" aria-selected="false" aria-controls="trade-panel" tabindex="-1">Legendaries</button><button type="button" role="tab" id="tab-fairy-tail" aria-selected="false" aria-controls="trade-panel" tabindex="-1">Fairy Tail</button></div>
       <div id="trade-panel" role="tabpanel" aria-labelledby="tab-mythical">
       <section class="scan-panel" aria-label="Search trade offers">
         <div class="scan-toolbar"><div><span class="status-pill pending" id="scan-badge">Ready to search</span><p id="price-note">Loading card catalog and saved prices…</p></div><div class="scan-actions"><button class="button button-outline" id="scan-stop" hidden>Stop scan</button><button class="button scan-button" id="scan-start" disabled>Refresh trades ↻</button></div></div>
@@ -44,7 +44,7 @@ export default `<!doctype html>
         <div class="trade-filters"><div><label class="trade-search-label" for="trade-search">Filter loaded offers</label>
         <input type="search" id="trade-search" placeholder="Search offered card, requested card, series, or player…" autocomplete="off"></div>
         <div><label class="trade-search-label" for="trade-sort">Sort loaded offers</label><select id="trade-sort"><option value="median-desc">Offered median: high to low</option><option value="median-asc">Offered median: low to high</option><option value="gain-desc">Potential gain: highest first</option><option value="percent-desc">Percentage gain: highest first</option></select></div></div>
-        <div class="trade-checkboxes"><label class="trade-legendary-filter"><input type="checkbox" id="trade-legendary"> <span id="trade-request-filter-label">Requests at least one Legendary</span></label><label class="trade-legendary-filter"><input type="checkbox" id="trade-owned"> <span>Trades I can accept</span></label></div>
+        <div class="trade-checkboxes"><label class="trade-legendary-filter" id="trade-request-filter"><input type="checkbox" id="trade-legendary"> <span id="trade-request-filter-label">Requests at least one Legendary</span></label><label class="trade-legendary-filter"><input type="checkbox" id="trade-owned"> <span>Trades I can accept</span></label></div>
         <details class="owned-card-picker" id="owned-card-picker">
           <summary><span>Card I own</span><span id="owned-card-count">0 selected</span></summary>
           <div class="owned-card-controls"><label class="trade-search-label" for="owned-card-search">Search the wiki top 1,000</label><div class="owned-card-searchbox"><span id="owned-card-chips"></span><input type="search" id="owned-card-search" placeholder="Search character, series, or wiki rank…" autocomplete="off"></div><div class="owned-card-toolbar"><span id="owned-card-results" role="status">Loading the wiki top 1,000…</span><button class="button button-outline" id="owned-card-clear" type="button" disabled>Clear selection</button></div></div>

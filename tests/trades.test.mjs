@@ -22,6 +22,24 @@ test('price order uses fresh seven-day prices, breaks ties by wiki rank, and put
   const cards = [{id:1,rarity:'M',rank:3},{id:2,rarity:'M',rank:1},{id:3,rarity:'M',rank:2},{id:4,rarity:'L',rank:4}];
   assert.deepEqual(searchOrder(cards,new Map([[1,{median7d:100}],[2,{median7d:100}],[3,{median7d:500,stale:true}],[4,{median7d:900}]])).map(c=>c.id),[2,1,3]);
 });
+
+test('Fairy Tail search includes all rarities and ranks, ordered by saved median; other series stay out', () => {
+  const cards = [{id:1,rarity:'C',series:'Fairy Tail',rank:5081},{id:2,rarity:'M',series:'Fairy Tail',rank:198},
+    {id:3,rarity:'R',series:'Fairy Tail',rank:2000},{id:4,rarity:'M',series:'Other',rank:1}];
+  assert.deepEqual(searchOrder(cards,new Map([[1,{median7d:59}],[2,{median7d:2000}]]),'FT').map(c=>c.id),[2,1,3]);
+});
+
+test('server accepts Fairy Tail Commons outside the top 1,000 and excludes trades merely requesting them', async () => {
+  const raw = [...Array.from({length:200},(_,i)=>({id:i+1,name:'M'+i,rarity:'M',rank:i})),
+    {id:500,name:'FT Common',series:'Fairy Tail',rarity:'C',rank:5080},{id:501,name:'Other Common',series:'Other',rarity:'C',rank:5081}];
+  const {coordinator}=setup(async url=>url.endsWith('/characters')?Response.json(raw):Response.json([offer('offered',500),{...offer('only-requested',1),wantIds:[500]}]));
+  coordinator.catalog=null;
+  const req=id=>new Request('https://tracker/api/trades/batch',{method:'POST',body:JSON.stringify({ids:[id]})});
+  const response=await coordinator.fetch(req(500)), events=[];
+  await readEvents(response,e=>events.push(e));
+  assert.equal(events[0].offers.length,1);assert.equal(events[0].offers[0].characterId,500);
+  assert.equal((await coordinator.fetch(req(501))).status,400);
+});
 test('simultaneous visitors share pending searches and cached results; cache expires after fifteen seconds', async () => {
   let requests = 0;
   const {coordinator,catalog,advance} = setup(async () => { requests++; await new Promise(r=>setTimeout(r,5)); return Response.json([offer()]); });
