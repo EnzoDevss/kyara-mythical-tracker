@@ -1,7 +1,7 @@
 import { priceKnown, searchOrder, readEvents, tradeMetrics, compareTradeRows, matchesRequestedCard } from './trades-data.js?v=fairy-tail-1';
 import { OWNED_CARDS_KEY, parseOwnedCards, ownedCardChoices, searchOwnedCards, matchesOwnedCards } from './owned-cards.js?v=1';
 const $ = id => document.getElementById(id);
-const createState = () => ({ cards: new Map(), prices: new Map(), order: [], results: new Map(), failures: new Map(), searched: new Set(), running: false, controller: null, limit: 60, token: 0, renderTimer: null, trackedIds: new Set(), snapshotAt: '', query: '', sort: 'median-desc', requestedFilter: false, message: 'Preparing the search list…', badge: 'Ready to search', badgeClass: 'status-pill pending' });
+const createState = () => ({ cards: new Map(), prices: new Map(), order: [], results: new Map(), failures: new Map(), searched: new Set(), running: false, controller: null, limit: 60, token: 0, renderTimer: null, trackedIds: new Set(), snapshotAt: '', query: '', sort: 'median-desc', offeredRarity: '', requestedFilter: false, message: 'Preparing the search list…', badge: 'Ready to search', badgeClass: 'status-pill pending' });
 const tabStates = { M: createState(), L: createState(), FT: createState() };
 const tabIds = { M: 'tab-mythical', L: 'tab-legendary', FT: 'tab-fairy-tail' };
 const rarityNames = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
@@ -60,10 +60,12 @@ function renderOwnedList() {
 }
 function render() {
   const query = $('trade-search').value.trim().toLocaleLowerCase(), now = Date.now();
+  const offeredRarity = rarity === 'FT' ? $('trade-rarity').value : '';
   const fragment = document.createDocumentFragment(); let total = 0, shown = 0;
   const rows = [];
   const seen = new Set();
   for (const card of state.order) {
+    if (offeredRarity && card.rarity !== offeredRarity) continue;
     const result = state.results.get(card.id); if (!result) continue;
     for (const offer of result.offers) {
       if (Date.parse(offer.expiresAt) <= now || seen.has(offer.id)) continue;
@@ -114,7 +116,7 @@ function render() {
   $('trade-count').textContent = number.format(total) + ' offers' + (total > shown ? ' · ' + shown + ' shown' : '');
   $('trade-more').hidden = total <= shown;
   $('trade-empty').hidden = total > 0;
-  const filtered = query || (rarity !== 'FT' && $('trade-legendary').checked) || $('trade-owned').checked;
+  const filtered = query || offeredRarity || (rarity !== 'FT' && $('trade-legendary').checked) || $('trade-owned').checked;
   $('trade-empty').textContent = $('trade-owned').checked && !ownedIds.size ? 'Select cards in “Card I own” to find matching trades.' : state.running ? 'Searching… matching offers will appear as cards are checked.' : state.searched.size && filtered ? 'No loaded offers match your filters.' : state.searched.size ? 'No active offers found in the cards checked.' : 'Press Refresh trades to search. Nothing runs automatically.';
   const warnings = [];
   if (state.failures.size) warnings.push(state.failures.size + ' card searches failed. Any retained results for those cards are older; refresh to retry.');
@@ -225,6 +227,9 @@ function updateTab() {
   $('results-title').textContent = label + ' offers';
   $('trade-request-filter-label').textContent = mythical ? 'Requests at least one Legendary' : 'Requests at least one Epic or a card outside the top 1,000';
   $('trade-request-filter').hidden = fairyTail;
+  $('trade-rarity-field').hidden = !fairyTail;
+  document.querySelector('.trade-filters').classList.toggle('has-rarity', fairyTail);
+  $('trade-rarity').value = state.offeredRarity;
   $('trade-epic-note').hidden = rarity !== 'L';
   $('scan-progress').max = Math.max(1, state.order.length);
   const group = fairyTail ? 'Fairy Tail cards · all rarities' : mythical ? 'Mythicals' : 'Legendaries';
@@ -260,6 +265,7 @@ for (const id of Object.values(tabIds)) $(id).addEventListener('keydown', async 
 $('scan-stop').addEventListener('click', () => state.controller?.abort());
 $('trade-search').addEventListener('input', () => { state.limit = 60; render(); });
 $('trade-sort').addEventListener('change', () => { state.limit = 60; render(); });
+$('trade-rarity').addEventListener('change', () => { state.offeredRarity = $('trade-rarity').value; state.limit = 60; render(); });
 $('trade-legendary').addEventListener('change', () => { state.limit = 60; render(); });
 $('trade-owned').addEventListener('change', () => { state.limit = 60; render(); });
 $('owned-card-picker').addEventListener('toggle', () => { if ($('owned-card-picker').open) renderOwnedList(); });

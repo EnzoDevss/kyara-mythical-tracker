@@ -9,12 +9,12 @@ export default `<!doctype html>
   <meta name="description" content="Find public Mythical, Legendary and all-rarity Fairy Tail trade offers, searched from highest market median to lowest.">
   <link rel="stylesheet" href="/styles.css?v=columns-3">
   <link rel="stylesheet" href="/history.css?v=hourly-1">
-  <link rel="stylesheet" href="/trades.css?v=fairy-tail-1">
+  <link rel="stylesheet" href="/trades.css?v=fairy-tail-2">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/png" href="/icons/app-192.png">
   <link rel="stylesheet" href="/install.css?v=banner-1">
   <script src="/install.js?v=banner-1" defer></script>
-  <script type="module" src="/trades.js?v=fairy-tail-1"></script>
+  <script type="module" src="/trades.js?v=fairy-tail-2"></script>
   <link rel="stylesheet" href="/auth.css?v=1">
 </head>
 <body>
@@ -43,6 +43,7 @@ export default `<!doctype html>
         <div class="section-heading"><div><p class="eyebrow">AVAILABLE WHEN CHECKED</p><h2 id="results-title">Mythical offers</h2></div><p class="trade-count" id="trade-count">0 offers</p></div>
         <div class="trade-filters"><div><label class="trade-search-label" for="trade-search">Filter loaded offers</label>
         <input type="search" id="trade-search" placeholder="Search offered card, requested card, series, or player…" autocomplete="off"></div>
+        <div id="trade-rarity-field" hidden><label class="trade-search-label" for="trade-rarity">Offered rarity</label><select id="trade-rarity"><option value="">All rarities</option><option value="M">Mythical</option><option value="L">Legendary</option><option value="E">Epic</option><option value="R">Rare</option><option value="U">Uncommon</option><option value="C">Common</option></select></div>
         <div><label class="trade-search-label" for="trade-sort">Sort loaded offers</label><select id="trade-sort"><option value="median-desc">Offered median: high to low</option><option value="median-asc">Offered median: low to high</option><option value="gain-desc">Potential gain: highest first</option><option value="percent-desc">Percentage gain: highest first</option></select></div></div>
         <div class="trade-checkboxes"><label class="trade-legendary-filter" id="trade-request-filter"><input type="checkbox" id="trade-legendary"> <span id="trade-request-filter-label">Requests at least one Legendary</span></label><label class="trade-legendary-filter"><input type="checkbox" id="trade-owned"> <span>Trades I can accept</span></label></div>
         <details class="owned-card-picker" id="owned-card-picker">
