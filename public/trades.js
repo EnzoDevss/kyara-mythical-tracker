@@ -1,4 +1,4 @@
-import { priceKnown, searchOrder, readEvents, tradeMetrics, ownedTradeMetrics, compareTradeRows, matchesRequestedCard } from './trades-data.js?v=owned-gain-1';
+import { priceKnown, searchOrder, readEvents, tradeMetrics, ownedTradeMetrics, compareTradeRows, matchesRequestedCard } from './trades-data.js?v=owned-gain-2';
 import { OWNED_CARDS_KEY, parseOwnedCards, ownedCardChoices, searchOwnedCards, matchesOwnedCards } from './owned-cards.js?v=1';
 import { loadCounter } from './counter-data.js?v=counter-1';
 import { renderCounter } from './counter.js?v=counter-1';
@@ -78,12 +78,12 @@ function render() {
       if ($('trade-owned').checked && !matchesOwnedCards(offer, ownedIds)) continue;
       const searchable = [card.name, card.series, offer.user.pseudo, ...wanted.flatMap(c => [c.name, c.series])].join(' ').toLocaleLowerCase();
       if (query && !searchable.includes(query)) continue;
-      rows.push({ card, result, offer, wanted, metrics: tradeMetrics(offer, state.prices) });
+      rows.push({ card, result, offer, wanted, metrics: tradeMetrics(offer, state.prices), ownedMetrics: ownedTradeMetrics(offer, state.prices, ownedIds) });
     }
   }
   rows.sort((a, b) => compareTradeRows(a, b, $('trade-sort').value));
   total = rows.length;
-  for (const { card, result, offer, wanted, metrics } of rows.slice(0, state.limit)) {
+  for (const { card, result, offer, wanted, metrics, ownedMetrics } of rows.slice(0, state.limit)) {
       shown++;
       const article = node('article', undefined, 'trade-offer');
       const main = node('div', undefined, 'trade-offer-main');
@@ -109,19 +109,18 @@ function render() {
         comparison.classList.add(metrics.gain > 0 ? 'positive' : metrics.gain < 0 ? 'negative' : 'neutral');
         comparison.textContent = `Potential gain: ${signed(metrics.gain)} ◆ · ${metrics.percent === null ? 'percentage unavailable (zero requested median)' : signed(metrics.percent) + '%'} · vs cheapest requested card (${number.format(metrics.lowest)} ◆)`;
       } else comparison.textContent = 'Potential gain unavailable · missing or stale prices.';
-      const ownedMetrics = ownedTradeMetrics(offer, state.prices, ownedIds);
       const ownedComparison = node('p', undefined, 'trade-comparison');
       if (ownedMetrics.gain !== null) {
         ownedComparison.classList.add(ownedMetrics.gain > 0 ? 'positive' : ownedMetrics.gain < 0 ? 'negative' : 'neutral');
         ownedComparison.textContent = `Owned potential gain: ${signed(ownedMetrics.gain)} ◆ · ${ownedMetrics.percent === null ? 'percentage unavailable (zero requested median)' : signed(ownedMetrics.percent) + '%'} · vs cheapest owned requested card (${number.format(ownedMetrics.lowest)} ◆)`;
-      } else ownedComparison.textContent = matchesOwnedCards(offer, ownedIds)
-        ? 'Owned potential gain unavailable · missing or stale prices.'
-        : 'Owned potential gain unavailable · no requested cards marked as owned.';
+      } else ownedComparison.textContent = 'Owned potential gain unavailable · missing or stale prices.';
       const meta = node('div', undefined, 'trade-meta');
       const details = node('p'); details.append(node('span', 'By ' + offer.user.pseudo), node('br'), node('span', 'Checked ' + clock.format(result.checkedAt) + (result.cached ? ' · cached' : '') + (state.running && !state.searched.has(card.id) ? ' · previous scan' : '') + ' · expires ' + date.format(new Date(offer.expiresAt))));
       const open = node('a', 'Open Kyara ↗', 'trade-open');
       open.href = 'https://kyara.games/marche?onglet=offres&offre=' + encodeURIComponent(offer.id) + '&trackerCard=' + card.id; open.target = '_blank'; open.rel = 'noopener noreferrer';
-      meta.append(details, open); article.append(main, comparison, ownedComparison, meta); fragment.append(article);
+      meta.append(details, open); article.append(main, comparison);
+      if (matchesOwnedCards(offer, ownedIds)) article.append(ownedComparison);
+      article.append(meta); fragment.append(article);
   }
   $('trade-offers').replaceChildren(fragment);
   $('trade-count').textContent = number.format(total) + ' offers' + (total > shown ? ' · ' + shown + ' shown' : '');
@@ -299,7 +298,7 @@ function updateTab() {
   $('scan-explanation').textContent = counter ? 'Each refresh discovers current rooms and pages backward to the one-hour cutoff or the end of available history. Results may be reused for up to 15 seconds. Requests share pacing with trade searches and pause when needed. Nothing runs automatically.' : 'Results may be reused for up to 15 seconds. Traffic is shared at up to 10 searches/second, with automatic pauses when needed. Offers can be taken or withdrawn after checking. Complete trades on Kyara.';
   $('scan-start').textContent = counter ? 'Refresh counter ↻' : 'Refresh trades ↻';
   $('trade-search').placeholder = counter ? 'Search card, requested card, series, message, or player…' : 'Search offered card, requested card, series, or player…';
-  $('trade-sort').replaceChildren(...(counter ? [['newest','Newest messages first'],['oldest','Oldest messages first'],['median-desc','Card median: high to low'],['median-asc','Card median: low to high']] : [['median-desc','Offered median: high to low'],['median-asc','Offered median: low to high'],['gain-desc','Potential gain: highest first'],['percent-desc','Percentage gain: highest first']]).map(([value, text]) => new Option(text, value)));
+  $('trade-sort').replaceChildren(...(counter ? [['newest','Newest messages first'],['oldest','Oldest messages first'],['median-desc','Card median: high to low'],['median-asc','Card median: low to high']] : [['median-desc','Offered median: high to low'],['median-asc','Offered median: low to high'],['gain-desc','Potential gain: highest first'],['owned-gain-desc','Owned potential gain: highest first'],['percent-desc','Percentage gain: highest first']]).map(([value, text]) => new Option(text, value)));
   if (counter) { updateCounterRooms(); $('counter-type').value = state.counterType; }
   $('trade-rarity').value = state.offeredRarity;
   $('trade-epic-note').hidden = rarity !== 'L';

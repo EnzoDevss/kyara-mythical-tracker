@@ -10,8 +10,9 @@ export function ownedTradeMetrics(offer, prices, ownedIds) {
   return tradeMetrics({ ...offer, wantIds: offer.wantIds.filter(id => ownedIds.has(id)) }, prices);
 }
 export function compareTradeRows(a, b, mode) {
-  const key = mode === 'gain-desc' ? 'gain' : mode === 'percent-desc' ? 'percent' : 'median';
-  const x = a.metrics[key], y = b.metrics[key];
+  const owned = mode === 'owned-gain-desc';
+  const key = owned || mode === 'gain-desc' ? 'gain' : mode === 'percent-desc' ? 'percent' : 'median';
+  const x = (owned ? a.ownedMetrics : a.metrics)?.[key] ?? null, y = (owned ? b.ownedMetrics : b.metrics)?.[key] ?? null;
   if (x === null && y === null) return 0;
   if (x === null) return 1;
   if (y === null) return -1;

@@ -21,6 +21,19 @@ test('gain compares the offered card with the cheapest individual requested card
   assert.equal(value.lowest,3000); assert.equal(value.gain,2000);
   assert.ok(Math.abs(value.percent - 66.6666666667) < 1e-6);
 });
+
+test('owned gain sorting recalculates after selections change and puts unavailable gains last', () => {
+  const prices = new Map([[1,{median7d:450}],[2,{median7d:500}],[3,{median7d:168}],[4,{median7d:100}],[5,{median7d:600,stale:true}]]);
+  const offers = [{characterId:1,wantIds:[3,4]},{characterId:2,wantIds:[3]},{characterId:5,wantIds:[3,4]}];
+  const owned = new Set([3]);
+  const sorted = () => offers.map(offer => ({offer,ownedMetrics:ownedTradeMetrics(offer,prices,owned)}))
+    .sort((a,b) => compareTradeRows(a,b,'owned-gain-desc')).map(row => row.offer.characterId);
+  assert.deepEqual(sorted(), [2,1,5]);
+  owned.clear(); owned.add(4);
+  assert.deepEqual(sorted(), [1,2,5]);
+  owned.clear();
+  assert.deepEqual(sorted(), [1,2,5]);
+});
 test('Legendary searches include only wiki ranks 1–1000; default Mythical selection is unchanged', () => {
   const cards = [{id:1,rarity:'M',rank:1002},{id:2,rarity:'L',rank:1},{id:3,rarity:'L',rank:1000},{id:4,rarity:'L',rank:1001},{id:5,rarity:'E',rank:50}];
   const prices = new Map([[2,{median7d:100}],[3,{median7d:200}]]);
