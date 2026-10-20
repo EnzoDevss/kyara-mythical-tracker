@@ -3,6 +3,7 @@
 
 .trade-filters{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:14px}.trade-filters select{width:100%;height:44px;border:1px solid var(--line);background:var(--white);color:var(--ink);padding:0 12px;font-size:12px}.trade-comparison{font-size:11px;line-height:1.7;margin:16px 0 0;color:var(--muted)}.trade-comparison.positive{color:#44d79a}.trade-comparison.negative{color:#ff7969}@media(max-width:650px){.trade-filters{grid-template-columns:1fr}}
 
+.trade-comparison+.trade-comparison{margin-top:4px}
 .trade-legendary-filter{display:flex;align-items:center;gap:9px;margin:16px 0 0;font-size:12px;color:var(--ink);cursor:pointer}.trade-legendary-filter input{width:17px;height:17px;accent-color:#ff6548;cursor:pointer}
 
 .wanted-card.wanted-legendary{border-color:#f2cc32;box-shadow:0 0 0 1px #f2cc3233;background:#f2cc3208}

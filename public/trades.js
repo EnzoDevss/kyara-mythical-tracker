@@ -1,4 +1,4 @@
-import { priceKnown, searchOrder, readEvents, tradeMetrics, compareTradeRows, matchesRequestedCard } from './trades-data.js?v=fairy-tail-1';
+import { priceKnown, searchOrder, readEvents, tradeMetrics, ownedTradeMetrics, compareTradeRows, matchesRequestedCard } from './trades-data.js?v=owned-gain-1';
 import { OWNED_CARDS_KEY, parseOwnedCards, ownedCardChoices, searchOwnedCards, matchesOwnedCards } from './owned-cards.js?v=1';
 import { loadCounter } from './counter-data.js?v=counter-1';
 import { renderCounter } from './counter.js?v=counter-1';
@@ -104,16 +104,24 @@ function render() {
       if (!wanted.length) choices.append(node('span', 'No requested cards listed.'));
       request.append(choices); main.append(given, node('div', '⇄', 'trade-arrow'), request);
       const comparison = node('p', undefined, 'trade-comparison');
+      const signed = value => (value > 0 ? '+' : '') + number.format(value);
       if (metrics.gain !== null) {
-        const signed = value => (value > 0 ? '+' : '') + number.format(value);
         comparison.classList.add(metrics.gain > 0 ? 'positive' : metrics.gain < 0 ? 'negative' : 'neutral');
         comparison.textContent = `Potential gain: ${signed(metrics.gain)} ◆ · ${metrics.percent === null ? 'percentage unavailable (zero requested median)' : signed(metrics.percent) + '%'} · vs cheapest requested card (${number.format(metrics.lowest)} ◆)`;
       } else comparison.textContent = 'Potential gain unavailable · missing or stale prices.';
+      const ownedMetrics = ownedTradeMetrics(offer, state.prices, ownedIds);
+      const ownedComparison = node('p', undefined, 'trade-comparison');
+      if (ownedMetrics.gain !== null) {
+        ownedComparison.classList.add(ownedMetrics.gain > 0 ? 'positive' : ownedMetrics.gain < 0 ? 'negative' : 'neutral');
+        ownedComparison.textContent = `Owned potential gain: ${signed(ownedMetrics.gain)} ◆ · ${ownedMetrics.percent === null ? 'percentage unavailable (zero requested median)' : signed(ownedMetrics.percent) + '%'} · vs cheapest owned requested card (${number.format(ownedMetrics.lowest)} ◆)`;
+      } else ownedComparison.textContent = matchesOwnedCards(offer, ownedIds)
+        ? 'Owned potential gain unavailable · missing or stale prices.'
+        : 'Owned potential gain unavailable · no requested cards marked as owned.';
       const meta = node('div', undefined, 'trade-meta');
       const details = node('p'); details.append(node('span', 'By ' + offer.user.pseudo), node('br'), node('span', 'Checked ' + clock.format(result.checkedAt) + (result.cached ? ' · cached' : '') + (state.running && !state.searched.has(card.id) ? ' · previous scan' : '') + ' · expires ' + date.format(new Date(offer.expiresAt))));
       const open = node('a', 'Open Kyara ↗', 'trade-open');
       open.href = 'https://kyara.games/marche?onglet=offres&offre=' + encodeURIComponent(offer.id) + '&trackerCard=' + card.id; open.target = '_blank'; open.rel = 'noopener noreferrer';
-      meta.append(details, open); article.append(main, comparison, meta); fragment.append(article);
+      meta.append(details, open); article.append(main, comparison, ownedComparison, meta); fragment.append(article);
   }
   $('trade-offers').replaceChildren(fragment);
   $('trade-count').textContent = number.format(total) + ' offers' + (total > shown ? ' · ' + shown + ' shown' : '');

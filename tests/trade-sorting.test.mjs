@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tradeMetrics, compareTradeRows, searchOrder, matchesRequestedCard } from '../public/trades-data.js';
+import { tradeMetrics, ownedTradeMetrics, compareTradeRows, searchOrder, matchesRequestedCard } from '../public/trades-data.js';
+
+test('owned gain uses only requested cards selected locally and leaves the offer unchanged', () => {
+  const prices = new Map([[1,{median7d:450}],[2,{median7d:100}],[3,{median7d:168}],[4,{median7d:294}]]);
+  const offer = { characterId: 1, wantIds: [2,3,4,5] }, original = JSON.stringify(offer);
+  const owned = new Set([1,3,4]);
+  assert.deepEqual(ownedTradeMetrics(offer, prices, owned), { median:450, lowest:168, gain:282, percent:282/168*100 });
+  assert.equal(JSON.stringify(offer), original);
+  assert.deepEqual([...owned], [1,3,4]);
+  assert.equal(ownedTradeMetrics(offer, prices, new Set([1])).gain, null);
+  assert.equal(ownedTradeMetrics(offer, prices, new Set([3,5])).gain, null);
+  prices.get(3).stale = true;
+  assert.equal(ownedTradeMetrics(offer, prices, owned).gain, null);
+});
 
 test('gain compares the offered card with the cheapest individual requested card', () => {
   const prices = new Map([[1,{median7d:5000}],[2,{median7d:4000}],[3,{median7d:3000}]]);

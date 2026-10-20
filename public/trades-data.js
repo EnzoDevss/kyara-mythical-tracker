@@ -6,6 +6,9 @@ export function tradeMetrics(offer, prices) {
   const gain = median !== null && lowest !== null ? median - lowest : null;
   return { median, lowest, gain, percent: gain !== null && lowest > 0 ? gain / lowest * 100 : null };
 }
+export function ownedTradeMetrics(offer, prices, ownedIds) {
+  return tradeMetrics({ ...offer, wantIds: offer.wantIds.filter(id => ownedIds.has(id)) }, prices);
+}
 export function compareTradeRows(a, b, mode) {
   const key = mode === 'gain-desc' ? 'gain' : mode === 'percent-desc' ? 'percent' : 'median';
   const x = a.metrics[key], y = b.metrics[key];

@@ -9,12 +9,12 @@ export default `<!doctype html>
   <meta name="description" content="Find public Mythical, Legendary and all-rarity Fairy Tail trade offers, searched from highest market median to lowest.">
   <link rel="stylesheet" href="/styles.css?v=columns-3">
   <link rel="stylesheet" href="/history.css?v=hourly-1">
-  <link rel="stylesheet" href="/trades.css?v=counter-1">
+  <link rel="stylesheet" href="/trades.css?v=owned-gain-1">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/png" href="/icons/app-192.png">
   <link rel="stylesheet" href="/install.css?v=banner-1">
   <script src="/install.js?v=banner-1" defer></script>
-  <script type="module" src="/trades.js?v=counter-1"></script>
+  <script type="module" src="/trades.js?v=owned-gain-1"></script>
   <link rel="stylesheet" href="/auth.css?v=1">
 </head>
 <body>
