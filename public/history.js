@@ -1,5 +1,5 @@
 const rarityNames = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
-import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel, hourlyPoints, dailyPoints, chartAxisLabels } from './history-data.js?v=axis-2';
+import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel, hourlyPoints, dailyPoints, chartAxisLabels } from './history-data.js?v=axis-3';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -146,7 +146,8 @@ function drawChart() {
     const label = axisDate.format(new Date(point.at));
     return { label, x: model.left + (Date.parse(point.at) - start) / span * (model.right - model.left), width: textMetrics ? textMetrics.measureText(label).width : label.length * 6 };
   });
-  for (const tick of chartAxisLabels(candidates, model.left, model.right)) fragment.append(svg('text', { x: tick.labelX, y: model.bottom + 27, 'text-anchor': 'middle', class: 'chart-axis chart-date' }, tick.label));
+  // Let labels use the outer chart padding so the final hour does not crowd out its neighbor.
+  for (const tick of chartAxisLabels(candidates, model.left - 16, model.right + 16)) fragment.append(svg('text', { x: tick.labelX, y: model.bottom + 27, 'text-anchor': 'middle', class: 'chart-axis chart-date' }, tick.label));
   const defs = svg('defs', {});
   const gradient = svg('linearGradient', { id: 'chart-area-fill', x1: 0, y1: model.top, x2: 0, y2: model.bottom, gradientUnits: 'userSpaceOnUse' });
   gradient.append(svg('stop', { offset: '0%', 'stop-color': '#ff6548', 'stop-opacity': 0.28 }), svg('stop', { offset: '100%', 'stop-color': '#ff6548', 'stop-opacity': 0.02 }));

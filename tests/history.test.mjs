@@ -135,3 +135,15 @@ test('narrow and clustered time labels never overlap or extend outside the plot'
     }
   }
 });
+
+test('chart padding keeps the penultimate hour visible as the window moves through each minute', () => {
+  for (let minute = 0; minute < 60; minute++) {
+    const candidates = Array.from({ length: 24 }, (_, i) => ({
+      label: `${i}:00`, x: 64 + (1 - minute / 60 + i) * 40.5, width: 24
+    }));
+    const labels = chartAxisLabels(candidates, 64 - 16, 1036 + 16);
+    assert.equal(labels.length, 24, `all hours remain visible at minute ${minute}`);
+    assert.ok(labels.at(-1).end <= 1052);
+    for (let i = 1; i < labels.length; i++) assert.ok(labels[i].start - labels[i - 1].end >= 12);
+  }
+});
