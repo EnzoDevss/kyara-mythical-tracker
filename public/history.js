@@ -1,5 +1,5 @@
 const rarityNames = { M: 'Mythical', L: 'Legendary', E: 'Epic', R: 'Rare', U: 'Uncommon', C: 'Common' };
-import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel, hourlyPoints, dailyPoints } from './history-data.js?v=daily-1';
+import { RANGE_SECONDS, isPrice, validateHistory, summarizeHistory, chartModel, hourlyPoints, dailyPoints, chartAxisLabels } from './history-data.js?v=axis-2';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -124,7 +124,8 @@ function drawChart() {
   }
   const width = Math.max(280, $('chart-frame').clientWidth);
   const daily = state.range !== '24h';
-  state.model = chartModel({ ...data, chartInterval: daily ? 'daily' : 'hourly', points: daily ? dailyPoints(data) : hourlyPoints(data) }, state.metric, width);
+  const visualPoints = daily ? dailyPoints(data) : hourlyPoints(data);
+  state.model = chartModel({ ...data, chartInterval: daily ? 'daily' : 'hourly', points: visualPoints }, state.metric, width);
   if (!state.model.dots.length) {
     showEmpty(daily ? 'No completed days yet' : 'No hourly points yet', daily ? 'Daily dots appear at 23:59:59 in your local time, using the last saved price of each completed day.' : 'The chart uses the latest saved price at each full hour. The next full hour will appear after a successful update.');
     $('point-readout').textContent = 'Raw observations remain available in the data table below.';
@@ -137,16 +138,15 @@ function drawChart() {
   fragment.append(svg('title', { id: 'plot-title' }, `${$('card-name').textContent}: ${$('chart-metric').textContent}`), svg('desc', { id: 'plot-description' }, `${stats.known} observations in the selected ${state.range} window. Prices range from ${stats.low} to ${stats.high} chakra. Use left and right arrow keys to inspect points. A data table is available below.`));
   for (const tick of model.ticks) fragment.append(svg('line', { x1: model.left, x2: model.right, y1: tick.y, y2: tick.y, class: 'chart-grid' }), svg('text', { x: model.left - 10, y: tick.y + 4, 'text-anchor': 'end', class: 'chart-axis' }, number.format(tick.value)));
   const axisDate = new Intl.DateTimeFormat(undefined, state.range === '24h' ? { hour: 'numeric', minute: '2-digit' } : { month: 'short', day: 'numeric' });
-  const count = daily ? Math.min(width < 500 ? 3 : 5, state.model.dots.length) : width < 500 ? 3 : 5;
-  for (let i = 0; i < count; i++) {
-    const start = Date.parse(data.windowStart), end = Date.parse(data.windowEnd);
-    const firstHour = Math.ceil(start / 3600000) * 3600000, lastHour = Math.floor(end / 3600000) * 3600000;
-    const time = Math.round((firstHour + i / Math.max(1, count - 1) * (lastHour - firstHour)) / 3600000) * 3600000;
-    const labelTime = daily ? state.model.dots[Math.round(i / Math.max(1, count - 1) * (state.model.dots.length - 1))].at : time;
-    const fraction = (typeof labelTime === 'number' ? labelTime : Date.parse(labelTime)) - start;
-    const position = fraction / (end - start);
-    fragment.append(svg('text', { x: model.left + position * (model.right - model.left), y: model.bottom + 27, 'text-anchor': i === 0 ? 'start' : i === count - 1 ? 'end' : 'middle', class: 'chart-axis' }, axisDate.format(new Date(labelTime))));
-  }
+  const textMetrics = document.createElement('canvas').getContext('2d');
+  if (textMetrics) textMetrics.font = `10px ${getComputedStyle(root).fontFamily}`;
+  const start = Date.parse(data.windowStart), span = Date.parse(data.windowEnd) - start;
+  // Calendar ticks cover the selected window, even when history only fills its final days.
+  const candidates = visualPoints.map(point => {
+    const label = axisDate.format(new Date(point.at));
+    return { label, x: model.left + (Date.parse(point.at) - start) / span * (model.right - model.left), width: textMetrics ? textMetrics.measureText(label).width : label.length * 6 };
+  });
+  for (const tick of chartAxisLabels(candidates, model.left, model.right)) fragment.append(svg('text', { x: tick.labelX, y: model.bottom + 27, 'text-anchor': 'middle', class: 'chart-axis chart-date' }, tick.label));
   const defs = svg('defs', {});
   const gradient = svg('linearGradient', { id: 'chart-area-fill', x1: 0, y1: model.top, x2: 0, y2: model.bottom, gradientUnits: 'userSpaceOnUse' });
   gradient.append(svg('stop', { offset: '0%', 'stop-color': '#ff6548', 'stop-opacity': 0.28 }), svg('stop', { offset: '100%', 'stop-color': '#ff6548', 'stop-opacity': 0.02 }));

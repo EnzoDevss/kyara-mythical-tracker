@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { selectHistory, historyResponse } from '../src/history.mjs';
 import worker from '../src/worker.mjs';
-import { validateHistory, summarizeHistory, chartModel, hourlyPoints, dailyPoints } from '../public/history-data.js';
+import { validateHistory, summarizeHistory, chartModel, hourlyPoints, dailyPoints, chartAxisLabels } from '../public/history-data.js';
 
 const now = Date.parse('2026-10-14T16:00:00Z');
 const stamp = now / 1000;
@@ -116,4 +116,22 @@ test('daily chart closes use the last same-day price and exclude today', () => {
   assert.equal(JSON.stringify(data), original);
   const model = chartModel({ ...data, chartInterval: 'daily', points: points.filter(p => p.median7d !== null) }, 'median7d');
   assert.equal(model.paths.length, 2);
+});
+
+test('daily date labels include October 16 instead of capping six days at five labels', () => {
+  const candidates = Array.from({ length: 6 }, (_, i) => ({ label: `${14 + i} Oct`, x: 100 + i * 160, width: 36 }));
+  const original = JSON.stringify(candidates);
+  assert.deepEqual(chartAxisLabels(candidates, 64, 980).map(tick => tick.label), candidates.map(tick => tick.label));
+  assert.equal(JSON.stringify(candidates), original);
+});
+
+test('narrow and clustered time labels never overlap or extend outside the plot', () => {
+  for (const [right, start, step, count] of [[258, 70, 30, 7], [258, 220, 5, 7], [1200, 64, 36, 30]]) {
+    const selected = chartAxisLabels(Array.from({ length: count }, (_, i) => ({ x: start + i * step, width: 40, label: String(i) })), 64, right);
+    assert.ok(selected.length > 0);
+    for (const [i, label] of selected.entries()) {
+      assert.ok(label.start >= 64 && label.end <= right);
+      if (i) assert.ok(label.start - selected[i - 1].end >= 12);
+    }
+  }
 });

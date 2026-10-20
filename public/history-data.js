@@ -109,3 +109,20 @@ export function dailyPoints(data) {
   }
   return points;
 }
+
+// Keep time labels inside the plot and omit only labels that would overlap.
+export function chartAxisLabels(candidates, left, right, gap = 12) {
+  const labels = candidates.filter(tick => Number.isFinite(tick.x) && Number.isFinite(tick.width) && tick.width >= 0 && tick.x >= left && tick.x <= right)
+    .map(tick => {
+      const width = Math.min(tick.width, right - left);
+      const x = Math.max(left + width / 2, Math.min(tick.x, right - width / 2));
+      return { ...tick, labelX: x, start: x - width / 2, end: x + width / 2 };
+    }).sort((a, b) => a.x - b.x);
+  if (labels.length < 2) return labels;
+  const last = labels.at(-1), selected = [];
+  for (const label of labels.slice(0, -1)) {
+    if (label.end + gap <= last.start && (!selected.length || selected.at(-1).end + gap <= label.start)) selected.push(label);
+  }
+  selected.push(last);
+  return selected;
+}
